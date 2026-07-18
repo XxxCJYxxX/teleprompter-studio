@@ -1,0 +1,1097 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>提词器 · Teleprompter</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0b0b0d;
+    --surface: #1a1a20;
+    --text: #e8e4dd;
+    --text-dim: #999890;
+    --accent: #d4a853;
+    --accent-glow: rgba(212,168,83,0.3);
+    --border: rgba(212,168,83,0.2);
+    --border-hover: rgba(212,168,83,0.5);
+    --font-size: 52px;
+    --line-height: 1.55;
+    --font-family: 'system-ui', -apple-system, sans-serif;
+    --align: center;
+    --speed: 50;
+    --scroll-y: 0;
+  }
+
+  body.theme-light {
+    --bg: #f5f3ee;
+    --surface: #ffffff;
+    --text: #1a1a1a;
+    --text-dim: #999;
+    --accent: #b8860b;
+    --accent-glow: rgba(184,134,11,0.25);
+    --border: rgba(184,134,11,0.25);
+    --border-hover: rgba(184,134,11,0.5);
+  }
+
+  body.theme-green {
+    --bg: #0a0f0a;
+    --surface: #141a14;
+    --text: #c8e6c8;
+    --text-dim: #6a8a6a;
+    --accent: #4caf50;
+    --accent-glow: rgba(76,175,80,0.3);
+    --border: rgba(76,175,80,0.2);
+    --border-hover: rgba(76,175,80,0.5);
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-family);
+    overflow: hidden;
+    height: 100vh;
+    user-select: none;
+    -webkit-user-select: none;
+    transition: background 0.4s, color 0.4s;
+  }
+
+  /* ── STAGE ── */
+  #stage {
+    position: fixed; inset: 0;
+    overflow: hidden;
+    transition: transform 0.3s;
+  }
+  #stage.mirrored { transform: scaleX(-1); }
+
+  #text-wrap {
+    position: absolute;
+    left: 0; right: 0; top: 0;
+    padding: 50vh 0 60vh;
+    transform: translateY(calc(var(--scroll-y) * -1px));
+    will-change: transform;
+    transition: none;
+  }
+
+  #text-content {
+    width: min(85vw, 960px);
+    margin: 0 auto;
+    font-size: var(--font-size);
+    line-height: var(--line-height);
+    text-align: var(--align);
+    color: var(--text);
+    white-space: pre-wrap;
+    word-break: break-word;
+    letter-spacing: 0.01em;
+    transition: font-size 0.25s, text-align 0.25s, line-height 0.25s, color 0.4s;
+  }
+
+  #text-content p { min-height: calc(var(--font-size) * var(--line-height)); }
+
+  /* Fade edges */
+  #fade-top, #fade-bottom {
+    position: fixed; left: 0; right: 0;
+    pointer-events: none; z-index: 5;
+    height: 22vh;
+  }
+  #fade-top {
+    top: 0;
+    background: linear-gradient(to bottom, var(--bg) 0%, transparent 100%);
+  }
+  #fade-bottom {
+    bottom: 0;
+    background: linear-gradient(to top, var(--bg) 0%, transparent 100%);
+  }
+
+  /* Reading guide line */
+  #guide {
+    position: fixed;
+    left: 5%; right: 5%;
+    top: 50%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent 0%, var(--accent) 20%, var(--accent) 80%, transparent 100%);
+    opacity: 0.6;
+    pointer-events: none; z-index: 4;
+  }
+  #guide::after {
+    content: '';
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%,-50%);
+    width: 8px; height: 8px;
+    background: var(--accent);
+    border-radius: 50%;
+    box-shadow: 0 0 12px var(--accent-glow);
+  }
+
+  /* Cursor */
+  body.playing { cursor: none; }
+  body.playing #controls { opacity: 0; pointer-events: none; }
+  body.playing #status-bar { opacity: 0; }
+  body.playing #fade-top { opacity: 1; }
+  body.playing #fade-bottom { opacity: 1; }
+  body.show-ui #controls { opacity: 1; pointer-events: auto; }
+  body.show-ui #status-bar { opacity: 1; }
+  body.paused #controls { opacity: 1; pointer-events: auto; }
+  body.paused #status-bar { opacity: 1; }
+
+  /* ── STATUS BAR ── */
+  #status-bar {
+    position: fixed; top: 12px; right: 16px;
+    z-index: 100;
+    display: flex; gap: 10px; align-items: center;
+    font-size: 11px;
+    color: var(--text-dim);
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    transition: opacity 0.4s;
+  }
+  #status-bar span {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 10px;
+    transition: background 0.4s, border 0.4s;
+  }
+
+  /* ── CONTROLS ── */
+  #controls {
+    position: fixed;
+    bottom: 20px; left: 50%;
+    transform: translateX(-50%);
+    z-index: 100;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 14px 18px;
+    display: flex; flex-direction: column; gap: 10px;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    transition: opacity 0.4s, background 0.4s, border 0.4s;
+    font-size: 11px;
+    width: min(420px, 94vw);
+  }
+
+  .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .row.space-between { justify-content: space-between; }
+
+  .label {
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 9px;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    min-width: 36px;
+    white-space: nowrap;
+  }
+
+  .val {
+    font-size: 10px;
+    color: var(--text-dim);
+    min-width: 32px; text-align: right;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  }
+
+  button {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 6px 12px;
+    cursor: pointer;
+    font-size: 11px;
+    font-family: inherit;
+    transition: background 0.15s, border-color 0.15s, color 0.4s;
+    display: inline-flex; align-items: center; justify-content: center;
+    gap: 4px;
+    white-space: nowrap;
+    touch-action: manipulation;
+  }
+  button:hover { background: rgba(212,168,83,0.1); border-color: var(--border-hover); }
+  button.active { background: rgba(212,168,83,0.18); border-color: var(--accent); color: var(--accent); }
+  button.accent { border-color: var(--accent); color: var(--accent); }
+  button.accent:hover { background: rgba(212,168,83,0.15); }
+
+  #btn-play {
+    flex: 1; padding: 8px 18px; font-size: 13px;
+    border-color: var(--accent); color: var(--accent);
+    font-weight: 600;
+  }
+
+  input[type=range] {
+    -webkit-appearance: none;
+    flex: 1; height: 3px;
+    background: var(--border);
+    border-radius: 2px; outline: none;
+    min-width: 60px;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    box-shadow: 0 0 6px var(--accent-glow);
+  }
+
+  select {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 7px;
+    padding: 5px 8px;
+    font-size: 11px;
+    font-family: inherit;
+    outline: none;
+    cursor: pointer;
+    transition: background 0.4s, border 0.4s, color 0.4s;
+  }
+  select:focus { border-color: var(--accent); }
+
+  .btn-group { display: flex; gap: 2px; }
+  .btn-group button:first-child { border-radius: 8px 0 0 8px; }
+  .btn-group button:last-child { border-radius: 0 8px 8px 0; }
+  .btn-group button:not(:first-child):not(:last-child) { border-radius: 0; }
+
+  .theme-dot {
+    width: 15px; height: 15px; border-radius: 50%;
+    cursor: pointer; border: 2px solid transparent;
+    transition: border-color 0.2s;
+  }
+  .theme-dot.active { border-color: var(--accent); }
+  .theme-dot.dark { background: #0b0b0d; }
+  .theme-dot.light { background: #f5f3ee; }
+  .theme-dot.green { background: #0a0f0a; }
+
+  /* ── MODAL ── */
+  .overlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.75);
+    z-index: 200;
+    align-items: center; justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+  .overlay.open { display: flex; }
+
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+    width: min(720px, 92vw);
+    max-height: 90vh;
+    display: flex; flex-direction: column; gap: 14px;
+    transition: background 0.4s, border 0.4s;
+  }
+  .modal h3 {
+    color: var(--accent);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  }
+  .modal textarea {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 10px;
+    padding: 16px;
+    font-size: 14px;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    resize: vertical;
+    min-height: 240px;
+    outline: none;
+    line-height: 1.6;
+    transition: background 0.4s, border 0.4s, color 0.4s;
+  }
+  .modal textarea:focus { border-color: var(--accent); }
+  .modal textarea::placeholder { color: var(--text-dim); opacity: 0.5; }
+
+  .import-options {
+    display: flex; gap: 8px; flex-wrap: wrap;
+  }
+  .import-options button {
+    font-size: 11px; padding: 7px 14px;
+  }
+
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+  .modal-actions button { padding: 8px 20px; }
+  #btn-save { background: rgba(212,168,83,0.12); border-color: var(--accent); color: var(--accent); }
+
+  /* ── KEYBOARD HINT ── */
+  #kbd-hint {
+    position: fixed; top: 50px; right: 16px;
+    z-index: 99;
+    font-size: 10px; color: var(--text-dim);
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 14px;
+    transition: opacity 0.4s, background 0.4s, border 0.4s;
+    line-height: 1.6;
+    pointer-events: none;
+  }
+  #kbd-hint kbd {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-family: inherit; font-size: 10px;
+    transition: background 0.4s, border 0.4s;
+  }
+
+  /* ── DRAG OVERLAY ── */
+  #drag-overlay {
+    display: none;
+    position: fixed; inset: 0;
+    z-index: 300;
+    background: rgba(212,168,83,0.08);
+    border: 3px dashed var(--accent);
+    border-radius: 20px;
+    margin: 16px;
+    align-items: center; justify-content: center;
+    font-size: 24px; color: var(--accent);
+    pointer-events: none;
+  }
+  #drag-overlay.show { display: flex; }
+
+  /* ── TOAST ── */
+  .toast {
+    position: fixed; bottom: 120px; left: 50%;
+    transform: translateX(-50%);
+    background: var(--accent); color: var(--bg);
+    padding: 8px 20px;
+    border-radius: 20px;
+    font-size: 13px; font-weight: 600;
+    z-index: 400;
+    animation: toast-in 0.3s ease, toast-out 0.3s ease 1.8s;
+  }
+  @keyframes toast-in { from { opacity: 0; transform: translateX(-50%) translateY(10px); } }
+  @keyframes toast-out { to { opacity: 0; transform: translateX(-50%) translateY(-10px); } }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 600px) {
+    :root { --font-size: 36px; }
+    #controls { padding: 10px 14px; gap: 7px; border-radius: 12px; }
+    .modal { padding: 18px; }
+    #kbd-hint { display: none; }
+    #text-content { width: min(92vw, 960px); }
+  }
+</style>
+</head>
+<body>
+
+<!-- Drag overlay -->
+<div id="drag-overlay">📂 拖放文件到此处导入</div>
+
+<!-- Stage -->
+<div id="stage">
+  <div id="text-wrap">
+    <div id="text-content"><p>提词器已就绪</p><p>点击 <b>编辑脚本</b> 或直接 <b>粘贴/拖放</b> 文本开始</p><p></p><p>Teleprompter ready — press <b>Edit Script</b> or <b>drag &amp; drop</b> text to begin</p></div>
+  </div>
+</div>
+
+<!-- Fade edges -->
+<div id="fade-top"></div>
+<div id="fade-bottom"></div>
+
+<!-- Reading guide -->
+<div id="guide"></div>
+
+<!-- Status bar -->
+<div id="status-bar">
+  <span id="word-count">0 字</span>
+  <span id="speed-display">50 spd</span>
+  <span id="progress-display">--</span>
+</div>
+
+<!-- Keyboard hints -->
+<div id="kbd-hint">
+  <kbd>Space</kbd> 播放/暂停 &nbsp; <kbd>Esc</kbd> 停止<br>
+  <kbd>←</kbd><kbd>→</kbd> 速度 &nbsp; <kbd>↑</kbd><kbd>↓</kbd> 字号<br>
+  <kbd>F</kbd> 全屏 &nbsp; <kbd>M</kbd> 镜像 &nbsp; <kbd>E</kbd> 编辑<br>
+  <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> 主题 &nbsp; <kbd>?</kbd> 隐藏
+</div>
+
+<!-- Controls -->
+<div id="controls">
+  <div class="row">
+    <button id="btn-play" class="accent" title="Space">▶ 开始播放</button>
+    <button id="btn-stop" title="Esc">⏹ 停止</button>
+    <button id="btn-edit" title="E">✎ 编辑脚本</button>
+    <button id="btn-mirror" title="M">🪞 镜像</button>
+    <button id="btn-fullscreen" title="F">⛶</button>
+  </div>
+
+  <div class="row">
+    <span class="label">速度</span>
+    <input type="range" id="speed-slider" min="5" max="100" value="50" step="1">
+    <span class="val" id="speed-val">50</span>
+    <button id="btn-speed-down" title="←">−</button>
+    <button id="btn-speed-up" title="→">+</button>
+  </div>
+
+  <div class="row">
+    <span class="label">字号</span>
+    <input type="range" id="size-slider" min="20" max="120" value="52" step="2">
+    <span class="val" id="size-val">52px</span>
+    <button id="btn-size-down" title="↑">−</button>
+    <button id="btn-size-up" title="↓">+</button>
+  </div>
+
+  <div class="row space-between">
+    <div class="row">
+      <span class="label">字体</span>
+      <select id="font-select">
+        <option value="system-ui, -apple-system, sans-serif">无衬线</option>
+        <option value="'Noto Serif SC', Georgia, 'Songti SC', serif">衬线</option>
+        <option value="'SF Mono', 'Fira Code', 'Consolas', monospace">等宽</option>
+      </select>
+    </div>
+    <div class="row">
+      <span class="label">对齐</span>
+      <div class="btn-group" id="align-group">
+        <button data-align="left" title="左对齐">⫷</button>
+        <button data-align="center" class="active">⬤</button>
+        <button data-align="right" title="右对齐">⫸</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="row space-between">
+    <div class="row">
+      <span class="label">行距</span>
+      <select id="line-height-select">
+        <option value="1.35">紧凑</option>
+        <option value="1.55" selected>标准</option>
+        <option value="1.85">宽松</option>
+        <option value="2.2">极宽</option>
+      </select>
+    </div>
+    <div class="row">
+      <span class="label">主题</span>
+      <div class="theme-dot dark active" data-theme="dark" title="暗色"></div>
+      <div class="theme-dot light" data-theme="light" title="亮色"></div>
+      <div class="theme-dot green" data-theme="green" title="绿色"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Modal -->
+<div class="overlay" id="edit-overlay">
+  <div class="modal">
+    <h3>编辑脚本</h3>
+    <div class="import-options">
+      <button id="btn-paste">📋 粘贴文本</button>
+      <button id="btn-load-file">📁 打开文件</button>
+      <button id="btn-load-url">🌐 从 URL 加载</button>
+      <button id="btn-clear">🗑 清空</button>
+    </div>
+    <textarea id="edit-area" placeholder="在此粘贴或输入脚本内容…&#10;支持纯文本和 Markdown 格式&#10;&#10;提示：也可以直接拖放 .txt/.md 文件到页面上"></textarea>
+    <div class="modal-actions">
+      <button id="btn-cancel">取消</button>
+      <button id="btn-save">✓ 应用脚本</button>
+    </div>
+  </div>
+</div>
+
+<!-- Hidden file input -->
+<input type="file" id="file-input" accept=".txt,.md,.html,.htm,.csv,.json" style="display:none">
+
+<script>
+(function() {
+  // ── State ──
+  const state = {
+    text: '',
+    paragraphs: [],
+    isPlaying: false,
+    speed: 50,         // 5-100
+    fontSize: 52,      // 20-120 px
+    fontFamily: 'system-ui, -apple-system, sans-serif',
+    lineHeight: 1.55,
+    align: 'center',
+    mirrored: false,
+    theme: 'dark',
+    scrollY: 0,        // current scroll offset in px
+    animFrame: null,
+    lastTime: 0,
+    uiTimeout: null,
+    totalHeight: 0,
+  };
+
+  // Load saved state
+  function loadState() {
+    try {
+      const saved = JSON.parse(localStorage.getItem('teleprompter-state'));
+      if (saved) {
+        if (saved.text) state.text = saved.text;
+        if (saved.speed) state.speed = saved.speed;
+        if (saved.fontSize) state.fontSize = saved.fontSize;
+        if (saved.fontFamily) state.fontFamily = saved.fontFamily;
+        if (saved.lineHeight) state.lineHeight = saved.lineHeight;
+        if (saved.align) state.align = saved.align;
+        if (saved.theme) state.theme = saved.theme;
+      }
+    } catch(e) { /* ignore */ }
+  }
+
+  function saveState() {
+    try {
+      localStorage.setItem('teleprompter-state', JSON.stringify({
+        text: state.text,
+        speed: state.speed,
+        fontSize: state.fontSize,
+        fontFamily: state.fontFamily,
+        lineHeight: state.lineHeight,
+        align: state.align,
+        theme: state.theme,
+      }));
+    } catch(e) { /* ignore */ }
+  }
+
+  // ── DOM refs ──
+  const $ = id => document.getElementById(id);
+  const stage = $('stage');
+  const textWrap = $('text-wrap');
+  const textContent = $('text-content');
+  const controls = $('controls');
+  const statusBar = $('status-bar');
+  const kbdHint = $('kbd-hint');
+  const dragOverlay = $('drag-overlay');
+  const editOverlay = $('edit-overlay');
+  const editArea = $('edit-area');
+  const btnPlay = $('btn-play');
+  const btnStop = $('btn-stop');
+  const btnMirror = $('btn-mirror');
+  const btnFullscreen = $('btn-fullscreen');
+  const speedSlider = $('speed-slider');
+  const speedVal = $('speed-val');
+  const sizeSlider = $('size-slider');
+  const sizeVal = $('size-val');
+  const fontSelect = $('font-select');
+  const lineHeightSelect = $('line-height-select');
+  const wordCountEl = $('word-count');
+  const speedDisplay = $('speed-display');
+  const progressDisplay = $('progress-display');
+  const fileInput = $('file-input');
+
+  // ── Apply state to DOM ──
+  function applyAll() {
+    const root = document.documentElement.style;
+    root.setProperty('--font-size', state.fontSize + 'px');
+    root.setProperty('--line-height', state.lineHeight);
+    root.setProperty('--font-family', state.fontFamily);
+    root.setProperty('--align', state.align);
+
+    // Text content
+    if (state.text.trim()) {
+      const html = state.text
+        .split(/\n/)
+        .map(line => {
+          const trimmed = line.trim();
+          if (!trimmed) return '<p></p>';
+          // Simple inline: **bold**, *italic*
+          let escaped = trimmed
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+          escaped = escaped
+            .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+            .replace(/\*(.+?)\*/g, '<i>$1</i>');
+          return `<p>${escaped}</p>`;
+        })
+        .join('\n');
+      textContent.innerHTML = html;
+    }
+
+    // Mirror
+    stage.classList.toggle('mirrored', state.mirrored);
+    btnMirror.classList.toggle('active', state.mirrored);
+
+    // Theme
+    document.body.className = 'theme-' + state.theme;
+    document.querySelectorAll('.theme-dot').forEach(d => {
+      d.classList.toggle('active', d.dataset.theme === state.theme);
+    });
+
+    // Font select
+    fontSelect.value = state.fontFamily;
+
+    // Line height
+    lineHeightSelect.value = String(state.lineHeight);
+
+    // Alignment buttons
+    document.querySelectorAll('#align-group button').forEach(b => {
+      b.classList.toggle('active', b.dataset.align === state.align);
+    });
+
+    // Speed slider
+    speedSlider.value = state.speed;
+    speedVal.textContent = state.speed;
+    speedDisplay.textContent = state.speed + ' spd';
+
+    // Size slider
+    sizeSlider.value = state.fontSize;
+    sizeVal.textContent = state.fontSize + 'px';
+
+    // Word count
+    const chars = state.text.replace(/\s/g, '').length;
+    const words = state.text.trim() ? state.text.trim().split(/\s+/).length : 0;
+    wordCountEl.textContent = words + ' 词 / ' + chars + ' 字';
+
+    // Edit area
+    editArea.value = state.text;
+
+    // Scroll position
+    textWrap.style.transform = `translateY(${state.scrollY * -1}px)`;
+  }
+
+  // Calculate total scrollable height
+  function calcTotalHeight() {
+    // Total text height minus one viewport (since we start at center)
+    const textH = textContent.scrollHeight;
+    const padding = window.innerHeight; // top padding 50vh + viewing area
+    state.totalHeight = Math.max(0, textH - window.innerHeight * 0.3);
+    return state.totalHeight;
+  }
+
+  // ── Scrolling ──
+  function startScroll() {
+    if (state.animFrame) return;
+    state.isPlaying = true;
+    state.lastTime = performance.now();
+    document.body.classList.add('playing');
+    document.body.classList.remove('paused');
+    btnPlay.textContent = '⏸ 暂停';
+    btnPlay.classList.add('active');
+    loop();
+  }
+
+  function pauseScroll() {
+    state.isPlaying = false;
+    if (state.animFrame) {
+      cancelAnimationFrame(state.animFrame);
+      state.animFrame = null;
+    }
+    document.body.classList.remove('playing');
+    document.body.classList.add('paused');
+    btnPlay.textContent = '▶ 继续';
+    btnPlay.classList.remove('active');
+  }
+
+  function stopScroll() {
+    pauseScroll();
+    state.scrollY = 0;
+    textWrap.style.transform = 'translateY(0px)';
+    document.body.classList.remove('playing', 'paused');
+    btnPlay.textContent = '▶ 开始播放';
+  }
+
+  function loop(timestamp) {
+    if (!timestamp) timestamp = performance.now();
+    const dt = Math.min((timestamp - state.lastTime) / 1000, 0.1); // cap at 100ms
+    state.lastTime = timestamp;
+
+    // px per second = speed * 2 (range: 10-200 px/s)
+    const pxPerSec = state.speed * 2;
+    state.scrollY += pxPerSec * dt;
+
+    // Recalc total height periodically
+    if (Math.floor(timestamp / 500) !== Math.floor((timestamp - dt * 1000) / 500)) {
+      calcTotalHeight();
+    }
+
+    // Check if we've scrolled past everything
+    if (state.scrollY >= state.totalHeight) {
+      stopScroll();
+      showToast('播放完毕 ✓');
+      return;
+    }
+
+    textWrap.style.transform = `translateY(${state.scrollY * -1}px)`;
+    updateProgress();
+    state.animFrame = requestAnimationFrame(loop);
+  }
+
+  function updateProgress() {
+    if (state.totalHeight <= 0) {
+      progressDisplay.textContent = '--';
+      return;
+    }
+    const pct = Math.min(100, Math.round((state.scrollY / state.totalHeight) * 100));
+    progressDisplay.textContent = pct + '%';
+  }
+
+  // ── UI visibility ──
+  function showUI() {
+    document.body.classList.add('show-ui');
+    clearTimeout(state.uiTimeout);
+    state.uiTimeout = setTimeout(() => {
+      if (state.isPlaying) document.body.classList.remove('show-ui');
+    }, 2500);
+  }
+
+  // ── Toast ──
+  function showToast(msg) {
+    const t = document.createElement('div');
+    t.className = 'toast';
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 2200);
+  }
+
+  // ── Set text ──
+  function setText(txt) {
+    state.text = txt;
+    state.scrollY = 0;
+    applyAll();
+    calcTotalHeight();
+    saveState();
+  }
+
+  // ── Import: file ──
+  function loadFile(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      setText(reader.result);
+      showToast('已导入: ' + file.name);
+    };
+    reader.onerror = () => showToast('文件读取失败');
+    reader.readAsText(file);
+  }
+
+  // ── Import: URL ──
+  async function loadURL(url) {
+    try {
+      // Try direct fetch first
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const txt = await resp.text();
+      setText(txt);
+      showToast('已从 URL 加载');
+    } catch(e) {
+      // Try CORS proxy as fallback
+      try {
+        const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
+        const resp = await fetch(proxyUrl);
+        if (!resp.ok) throw new Error('Proxy failed');
+        const txt = await resp.text();
+        setText(txt);
+        showToast('已从 URL 加载（代理）');
+      } catch(e2) {
+        showToast('URL 加载失败，请检查链接或尝试直接粘贴');
+      }
+    }
+  }
+
+  // ── Event handlers ──
+  btnPlay.addEventListener('click', () => {
+    if (!state.text.trim()) {
+      showToast('请先导入脚本内容');
+      return;
+    }
+    if (state.isPlaying) pauseScroll();
+    else startScroll();
+  });
+
+  btnStop.addEventListener('click', stopScroll);
+
+  btnMirror.addEventListener('click', () => {
+    state.mirrored = !state.mirrored;
+    applyAll();
+    saveState();
+  });
+
+  btnFullscreen.addEventListener('click', () => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else {
+      document.documentElement.requestFullscreen();
+    }
+  });
+
+  // Speed
+  speedSlider.addEventListener('input', () => {
+    state.speed = parseInt(speedSlider.value);
+    speedVal.textContent = state.speed;
+    speedDisplay.textContent = state.speed + ' spd';
+    saveState();
+  });
+
+  $('btn-speed-down').addEventListener('click', () => {
+    state.speed = Math.max(5, state.speed - 5);
+    applyAll();
+    saveState();
+  });
+
+  $('btn-speed-up').addEventListener('click', () => {
+    state.speed = Math.min(100, state.speed + 5);
+    applyAll();
+    saveState();
+  });
+
+  // Font size
+  sizeSlider.addEventListener('input', () => {
+    state.fontSize = parseInt(sizeSlider.value);
+    sizeVal.textContent = state.fontSize + 'px';
+    document.documentElement.style.setProperty('--font-size', state.fontSize + 'px');
+    calcTotalHeight();
+    saveState();
+  });
+
+  $('btn-size-down').addEventListener('click', () => {
+    state.fontSize = Math.max(20, state.fontSize - 4);
+    applyAll();
+    calcTotalHeight();
+    saveState();
+  });
+
+  $('btn-size-up').addEventListener('click', () => {
+    state.fontSize = Math.min(120, state.fontSize + 4);
+    applyAll();
+    calcTotalHeight();
+    saveState();
+  });
+
+  // Font family
+  fontSelect.addEventListener('change', () => {
+    state.fontFamily = fontSelect.value;
+    applyAll();
+    saveState();
+  });
+
+  // Line height
+  lineHeightSelect.addEventListener('change', () => {
+    state.lineHeight = parseFloat(lineHeightSelect.value);
+    applyAll();
+    calcTotalHeight();
+    saveState();
+  });
+
+  // Alignment
+  $('align-group').addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn || !btn.dataset.align) return;
+    state.align = btn.dataset.align;
+    applyAll();
+    saveState();
+  });
+
+  // Theme dots
+  document.querySelectorAll('.theme-dot').forEach(dot => {
+    dot.addEventListener('click', () => {
+      state.theme = dot.dataset.theme;
+      applyAll();
+      saveState();
+    });
+  });
+
+  // Edit modal
+  $('btn-edit').addEventListener('click', () => {
+    editArea.value = state.text;
+    editOverlay.classList.add('open');
+    editArea.focus();
+  });
+
+  $('btn-save').addEventListener('click', () => {
+    setText(editArea.value);
+    editOverlay.classList.remove('open');
+  });
+
+  $('btn-cancel').addEventListener('click', () => {
+    editOverlay.classList.remove('open');
+  });
+
+  editOverlay.addEventListener('click', (e) => {
+    if (e.target === editOverlay) editOverlay.classList.remove('open');
+  });
+
+  // Import buttons inside modal
+  $('btn-paste').addEventListener('click', async () => {
+    try {
+      const clipText = await navigator.clipboard.readText();
+      if (clipText) {
+        editArea.value = clipText;
+        showToast('已从剪贴板粘贴');
+      }
+    } catch(e) {
+      showToast('无法读取剪贴板，请手动粘贴 (Cmd+V)');
+    }
+  });
+
+  $('btn-load-file').addEventListener('click', () => fileInput.click());
+
+  $('btn-load-url').addEventListener('click', () => {
+    const url = prompt('输入文本文件的 URL：');
+    if (url) loadURL(url);
+  });
+
+  $('btn-clear').addEventListener('click', () => {
+    if (confirm('确定要清空所有内容吗？')) {
+      editArea.value = '';
+    }
+  });
+
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files[0]) loadFile(fileInput.files[0]);
+    fileInput.value = '';
+  });
+
+  // ── Drag & Drop ──
+  let dragCounter = 0;
+  document.addEventListener('dragenter', (e) => {
+    e.preventDefault();
+    dragCounter++;
+    if (dragCounter === 1) dragOverlay.classList.add('show');
+  });
+
+  document.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    dragCounter--;
+    if (dragCounter === 0) dragOverlay.classList.remove('show');
+  });
+
+  document.addEventListener('dragover', (e) => {
+    e.preventDefault();
+  });
+
+  document.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dragCounter = 0;
+    dragOverlay.classList.remove('show');
+    const file = e.dataTransfer.files[0];
+    if (file) loadFile(file);
+  });
+
+  // ── Click stage to toggle pause ──
+  stage.addEventListener('click', (e) => {
+    if (e.target.closest('#controls') || e.target.closest('.overlay')) return;
+    if (state.isPlaying) pauseScroll();
+    else if (state.text.trim()) startScroll();
+  });
+
+  // ── Mouse move shows UI ──
+  document.addEventListener('mousemove', showUI);
+  document.addEventListener('touchstart', showUI);
+
+  // ── Keyboard shortcuts ──
+  document.addEventListener('keydown', (e) => {
+    // Cmd+S / Ctrl+S to save in modal
+    if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+      if (editOverlay.classList.contains('open')) {
+        e.preventDefault();
+        setText(editArea.value);
+        editOverlay.classList.remove('open');
+        showToast('已保存 ✓');
+      }
+      return;
+    }
+
+    // Don't capture in modal (except Esc which closes it)
+    if (editOverlay.classList.contains('open')) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        editOverlay.classList.remove('open');
+      }
+      return;
+    }
+
+    // Don't capture when typing in inputs
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+
+    switch(e.key) {
+      case ' ':
+        e.preventDefault();
+        if (state.isPlaying) pauseScroll();
+        else if (state.text.trim()) startScroll();
+        break;
+      case 'Escape':
+        stopScroll();
+        break;
+      case 'ArrowLeft':
+        e.preventDefault();
+        state.speed = Math.max(5, state.speed - 1);
+        applyAll(); saveState();
+        break;
+      case 'ArrowRight':
+        e.preventDefault();
+        state.speed = Math.min(100, state.speed + 1);
+        applyAll(); saveState();
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        state.fontSize = Math.min(120, state.fontSize + 2);
+        applyAll(); calcTotalHeight(); saveState();
+        break;
+      case 'ArrowDown':
+        e.preventDefault();
+        state.fontSize = Math.max(20, state.fontSize - 2);
+        applyAll(); calcTotalHeight(); saveState();
+        break;
+      case 'f':
+      case 'F':
+        if (document.fullscreenElement) document.exitFullscreen();
+        else document.documentElement.requestFullscreen();
+        break;
+      case 'm':
+      case 'M':
+        state.mirrored = !state.mirrored;
+        applyAll(); saveState();
+        break;
+      case 'e':
+      case 'E':
+        editArea.value = state.text;
+        editOverlay.classList.add('open');
+        editArea.focus();
+        break;
+      case '1':
+        state.theme = 'dark'; applyAll(); saveState(); break;
+      case '2':
+        state.theme = 'light'; applyAll(); saveState(); break;
+      case '3':
+        state.theme = 'green'; applyAll(); saveState(); break;
+      case '?':
+        kbdHint.style.display = kbdHint.style.display === 'none' ? '' : 'none';
+        break;
+    }
+  });
+
+  // ── Paste anywhere ──
+  document.addEventListener('paste', (e) => {
+    if (editOverlay.classList.contains('open')) return;
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    const txt = e.clipboardData.getData('text/plain');
+    if (txt && txt.length > 10) {
+      e.preventDefault();
+      if (confirm('检测到剪贴板文本 (' + txt.length + ' 字符)，是否导入为脚本？')) {
+        setText(txt);
+        showToast('已导入剪贴板内容');
+      }
+    }
+  });
+
+  // ── Init ──
+  loadState();
+  if (!state.text.trim()) {
+    state.text = '提词器已就绪\n\n点击 编辑脚本 或直接粘贴/拖放文本开始\n\nTeleprompter ready — press Edit Script or drag & drop text to begin';
+  }
+  applyAll();
+  calcTotalHeight();
+
+  // Recalc on resize
+  window.addEventListener('resize', () => {
+    calcTotalHeight();
+    // Clamp scroll position
+    if (state.scrollY > state.totalHeight) state.scrollY = state.totalHeight;
+    textWrap.style.transform = `translateY(${state.scrollY * -1}px)`;
+  });
+
+  console.log('🎬 提词器已就绪 · Teleprompter ready');
+  console.log('   Space=播放  ←→=速度  ↑↓=字号  F=全屏  M=镜像  E=编辑  1/2/3=主题');
+  console.log('   拖放文件 | 粘贴文本 | 打开URL 均可导入脚本');
+})();
+</script>
+</body>
+</html>
