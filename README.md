@@ -7,6 +7,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.8+](https://img.shields.io/badge/Python-3.8%2B-blue)](https://www.python.org/)
 
+### 🚀 [点我直接使用 → teleprompter-studio](https://xxxcjyxxx.github.io/teleprompter-studio/)
+
 </div>
 
 ---
@@ -58,13 +60,17 @@
 
 ## 🚀 一键使用
 
-### 方式一：浏览器直接打开（单机版）
+### 方式一：在线直接使用 🌐
 
-下载 `teleprompter.html`，直接拖进浏览器即可。
+👉 **[xxxcjyxxx.github.io/teleprompter-studio](https://xxxcjyxxx.github.io/teleprompter-studio/)**
 
-> 不需要安装任何东西，不需要服务器，一个 HTML 文件搞定全部。
+点开即用，不需要安装任何东西。GitHub Pages 托管，全静态。
 
-### 方式二：内网服务端（双端版）
+### 方式二：下载离线使用（单机版）
+
+下载 `teleprompter.html`，直接拖进浏览器即可。纯离线，无网络也能跑。
+
+### 方式三：内网服务端（双端版）
 
 ```bash
 # 1. 确保有 Python 3（macOS / Linux 自带）
