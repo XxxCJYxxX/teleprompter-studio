@@ -6,6 +6,30 @@
 
 ---
 
+## [1.3.0] - 2026-07-21
+
+### 新增
+- **智能首页**：自动检测访问方式，提供三种入口
+  - ✏️ 编辑脚本 → 生成含内容的链接 + 二维码，平板扫码即用
+  - 📱 直接打开提词器（默认示例脚本或用户内容）
+  - 📋 粘贴脚本 → 一键进入提词模式
+- **内容编码进 URL**：脚本通过 Base64 编码写入 `#c=...` 片段
+  - 生成链接 → 平板扫码 → 自动解析并进入提词模式
+  - 无需服务器，纯静态 Pages 即可实现「编辑-分享-提词」闭环
+- **QR 码自动生成**：通过 qrserver.com API 实时生成
+- **macOS 一键启动器** `start.command`：双击直接跑服务 + 自动打开浏览器
+- **提词器客户端返回按钮**：可一键回到编辑页面
+
+### 变更
+- `index.html` 重构为「首页 + 编辑器 + 客户端」三合一
+- 服务端 `/` 路由改为展示首页（客户端走 `/client`）
+- `teleprompter.html` 同步为与 `index.html` 相同的新版本
+
+### 移除
+- 旧版独立提词器首页（空白页等待推送）
+
+---
+
 ## [1.2.2] - 2026-07-18
 
 ### 文档
@@ -94,10 +118,12 @@
 - [ ] 语音跟随模式（根据语速自动调速）
 - [ ] PWA 支持（安装到桌面，离线可用）
 - [ ] 暗色 / 亮色 / 绿色 三主题在客户端可用（快捷键 1/2/3）
+- [ ] Windows `start.bat` 一键启动器
 
 ---
 
-[1.2.2]: https://github.com/XxxCJYxxX/teleprompter-studio/compare/v1.2.1...HEAD
+[1.3.0]: https://github.com/XxxCJYxxX/teleprompter-studio/compare/v1.2.2...HEAD
+[1.2.2]: https://github.com/XxxCJYxxX/teleprompter-studio/releases/tag/v1.2.2
 [1.2.1]: https://github.com/XxxCJYxxX/teleprompter-studio/releases/tag/v1.2.1
 [1.2.0]: https://github.com/XxxCJYxxX/teleprompter-studio/releases/tag/v1.2.0
 [1.1.0]: https://github.com/XxxCJYxxX/teleprompter-studio/releases/tag/v1.1.0
