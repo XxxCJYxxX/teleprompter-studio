@@ -9,6 +9,8 @@
 
 ### 🚀 [点我直接使用 → teleprompter-studio](https://xxxcjyxxx.github.io/teleprompter-studio/)
 
+### ✏️ 编辑 → 生成链接 → 扫码 → 提词
+
 </div>
 
 ---
@@ -70,7 +72,14 @@
 
 下载 `teleprompter.html`，直接拖进浏览器即可。纯离线，无网络也能跑。
 
-### 方式三：内网服务端（双端版）
+### 方式三：macOS 一键启动 🖥
+
+```bash
+# 双击 start.command 即可
+# 自动启动服务 + 打开管理页面
+```
+
+### 方式四：内网服务端（双端版 · 手动）
 
 ```bash
 # 1. 确保有 Python 3（macOS / Linux 自带）
