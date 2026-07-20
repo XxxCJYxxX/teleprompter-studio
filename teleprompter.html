@@ -2,1095 +2,381 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>提词器 · Teleprompter</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>提词器 · Teleprompter Studio</title>
 <style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-  :root {
-    --bg: #0b0b0d;
-    --surface: #1a1a20;
-    --text: #e8e4dd;
-    --text-dim: #999890;
-    --accent: #d4a853;
-    --accent-glow: rgba(212,168,83,0.3);
-    --border: rgba(212,168,83,0.2);
-    --border-hover: rgba(212,168,83,0.5);
-    --font-size: 52px;
-    --line-height: 1.55;
-    --font-family: 'system-ui', -apple-system, sans-serif;
-    --align: center;
-    --speed: 50;
-    --scroll-y: 0;
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#0a0a0a;--sur:#0d0d12;--text:#e8e6dd;--accent:#d4a853;
+    --accent-dim:rgba(212,168,83,0.4);--panel-bg:rgba(20,20,24,0.94);
+    --fs:48px;--lh:1.55;--ff:system-ui,-apple-system,'PingFang SC',sans-serif;
   }
 
-  body.theme-light {
-    --bg: #f5f3ee;
-    --surface: #ffffff;
-    --text: #1a1a1a;
-    --text-dim: #999;
-    --accent: #b8860b;
-    --accent-glow: rgba(184,134,11,0.25);
-    --border: rgba(184,134,11,0.25);
-    --border-hover: rgba(184,134,11,0.5);
-  }
+  /* ═══ Landing page ═══ */
+  #landing{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;min-height:100dvh;background:var(--sur);padding:24px 16px}
+  #landing .wrap{width:min(680px,100%);display:flex;flex-direction:column;gap:18px}
+  #landing h1{font-size:22px;font-weight:700;color:var(--accent);text-align:center}
+  #landing .sub{text-align:center;font-size:12px;color:#666;margin-top:-10px}
 
-  body.theme-green {
-    --bg: #0a0f0a;
-    --surface: #141a14;
-    --text: #c8e6c8;
-    --text-dim: #6a8a6a;
-    --accent: #4caf50;
-    --accent-glow: rgba(76,175,80,0.3);
-    --border: rgba(76,175,80,0.2);
-    --border-hover: rgba(76,175,80,0.5);
-  }
+  .modes{display:flex;gap:12px;flex-wrap:wrap}
+  .mode{flex:1;min-width:140px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);color:#ccc;border-radius:14px;padding:20px 16px;cursor:pointer;transition:all .2s;text-decoration:none;text-align:center}
+  .mode:hover{background:rgba(255,255,255,.08);transform:translateY(-1px)}
+  .mode .ico{font-size:30px;display:block;margin-bottom:6px}
+  .mode .t{font-size:15px;font-weight:600;margin-bottom:3px}
+  .mode .d{font-size:10px;color:#555;line-height:1.4}
+  .mode.pri{border-color:rgba(212,168,83,.4);background:rgba(212,168,83,.08)}
+  .mode.pri .t{color:var(--accent)}
 
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--font-family);
-    overflow: hidden;
-    height: 100vh;
-    user-select: none;
-    -webkit-user-select: none;
-    transition: background 0.4s, color 0.4s;
-  }
+  textarea{width:100%;background:#14141a;border:1px solid rgba(255,255,255,.1);color:var(--text);border-radius:12px;padding:16px;font-size:14px;font-family:'SF Mono','Fira Code','Consolas','PingFang SC',monospace;line-height:1.7;resize:vertical;min-height:240px;outline:none;transition:border-color .2s}
+  textarea:focus{border-color:rgba(212,168,83,.5)}
+  textarea::placeholder{color:#555}
 
-  /* ── STAGE ── */
-  #stage {
-    position: fixed; inset: 0;
-    overflow: hidden;
-    transition: transform 0.3s;
-  }
-  #stage.mirrored { transform: scaleX(-1); }
+  .btns{display:flex;gap:8px;flex-wrap:wrap}
+  .btns button{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#ccc;border-radius:10px;padding:10px 18px;font-size:12px;font-family:inherit;cursor:pointer;transition:all .15s;white-space:nowrap}
+  .btns button:hover{background:rgba(255,255,255,.12)}
+  .btns button.pri{background:rgba(212,168,83,.15);border-color:var(--accent);color:var(--accent);font-weight:600}
+  .btns button.pri:hover{background:rgba(212,168,83,.25)}
 
-  #text-wrap {
-    position: absolute;
-    left: 0; right: 0; top: 0;
-    padding: 50vh 0 60vh;
-    transform: translateY(calc(var(--scroll-y) * -1px));
-    will-change: transform;
-    transition: none;
-  }
+  .info{font-size:11px;color:#555}
+  .info .v{color:var(--accent);font-variant-numeric:tabular-nums}
 
-  #text-content {
-    width: min(85vw, 960px);
-    margin: 0 auto;
-    font-size: var(--font-size);
-    line-height: var(--line-height);
-    text-align: var(--align);
-    color: var(--text);
-    white-space: pre-wrap;
-    word-break: break-word;
-    letter-spacing: 0.01em;
-    transition: font-size 0.25s, text-align 0.25s, line-height 0.25s, color 0.4s;
-  }
+  #share-card{display:none;background:#14141a;border:1px solid rgba(212,168,83,.2);border-radius:12px;padding:16px;gap:14px;align-items:center;flex-wrap:wrap}
+  #share-card.show{display:flex}
+  #qr-img{width:120px;height:120px;border-radius:8px}
+  .share-r{flex:1;min-width:180px;display:flex;flex-direction:column;gap:6px}
+  .share-r label{font-size:9px;color:#888;text-transform:uppercase;letter-spacing:.06em}
+  .share-r .url{font-size:10px;color:var(--accent);background:rgba(212,168,83,.08);padding:5px 8px;border-radius:5px;font-family:'SF Mono',monospace;word-break:break-all;max-height:50px;overflow-y:auto;line-height:1.4}
+  .share-r .note{font-size:9px;color:#555}
 
-  #text-content p { min-height: calc(var(--font-size) * var(--line-height)); }
+  #drop-zone{border:2px dashed rgba(255,255,255,.08);border-radius:10px;padding:18px;text-align:center;color:#555;font-size:11px;cursor:pointer;transition:border-color .2s}
+  #drop-zone:hover,#drop-zone.drag{border-color:rgba(212,168,83,.4);color:#888}
 
-  /* Fade edges */
-  #fade-top, #fade-bottom {
-    position: fixed; left: 0; right: 0;
-    pointer-events: none; z-index: 5;
-    height: 22vh;
-  }
-  #fade-top {
-    top: 0;
-    background: linear-gradient(to bottom, var(--bg) 0%, transparent 100%);
-  }
-  #fade-bottom {
-    bottom: 0;
-    background: linear-gradient(to top, var(--bg) 0%, transparent 100%);
-  }
+  hr{border:none;border-top:1px solid rgba(255,255,255,.06)}
 
-  /* Reading guide line */
-  #guide {
-    position: fixed;
-    left: 5%; right: 5%;
-    top: 50%;
-    height: 1px;
-    background: linear-gradient(90deg, transparent 0%, var(--accent) 20%, var(--accent) 80%, transparent 100%);
-    opacity: 0.6;
-    pointer-events: none; z-index: 4;
-  }
-  #guide::after {
-    content: '';
-    position: absolute;
-    top: 50%; left: 50%;
-    transform: translate(-50%,-50%);
-    width: 8px; height: 8px;
-    background: var(--accent);
-    border-radius: 50%;
-    box-shadow: 0 0 12px var(--accent-glow);
-  }
+  /* ═══ Client mode ═══ */
+  #client{display:none}
+  body.client-mode #landing{display:none}
+  body.client-mode{background:var(--bg);overflow:hidden}
+  body.client-mode #client{display:block}
 
-  /* Cursor */
-  body.playing { cursor: none; }
-  body.playing #controls { opacity: 0; pointer-events: none; }
-  body.playing #status-bar { opacity: 0; }
-  body.playing #fade-top { opacity: 1; }
-  body.playing #fade-bottom { opacity: 1; }
-  body.show-ui #controls { opacity: 1; pointer-events: auto; }
-  body.show-ui #status-bar { opacity: 1; }
-  body.paused #controls { opacity: 1; pointer-events: auto; }
-  body.paused #status-bar { opacity: 1; }
+  #stage{position:fixed;inset:0;overflow:hidden}
+  #stage.mirrored{transform:scaleX(-1)}
+  #text-wrap{position:absolute;left:0;right:0;top:0;padding:50vh 0 60vh;transform:translateY(0px);will-change:transform}
+  #text-content{width:min(90vw,900px);margin:0 auto;font-size:var(--fs);line-height:var(--lh);text-align:center;color:var(--text);white-space:pre-wrap;word-break:break-word;letter-spacing:.01em;transition:font-size .3s,line-height .3s}
+  #text-content p{min-height:calc(var(--fs)*var(--lh))}
+  #fade-top,#fade-bottom{position:fixed;left:0;right:0;pointer-events:none;z-index:5}
+  #fade-top{top:0;height:20vh;background:linear-gradient(to bottom,var(--bg),transparent)}
+  #fade-bottom{bottom:0;height:20vh;background:linear-gradient(to top,var(--bg),transparent)}
+  #guide{position:fixed;left:8%;right:8%;top:50%;height:1px;background:linear-gradient(90deg,transparent,var(--accent-dim) 20%,var(--accent-dim) 80%,transparent);pointer-events:none;z-index:4}
+  #guide::after{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:6px;height:6px;background:var(--accent);border-radius:50%}
 
-  /* ── STATUS BAR ── */
-  #status-bar {
-    position: fixed; top: 12px; right: 16px;
-    z-index: 100;
-    display: flex; gap: 10px; align-items: center;
-    font-size: 11px;
-    color: var(--text-dim);
-    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
-    transition: opacity 0.4s;
-  }
-  #status-bar span {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 4px 10px;
-    transition: background 0.4s, border 0.4s;
-  }
+  #top-bar{position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:50;display:flex;gap:6px;align-items:center;background:var(--panel-bg);border:1px solid rgba(255,255,255,.08);border-radius:20px;padding:6px 12px;font-size:11px;color:#999;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);transition:opacity .4s}
+  #top-bar button{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#ccc;border-radius:12px;padding:4px 10px;font-size:11px;font-family:inherit;cursor:pointer;white-space:nowrap;touch-action:manipulation}
+  #top-bar button:hover{background:rgba(255,255,255,.14)}
+  #top-bar button.active,#top-bar button.accent{border-color:var(--accent);color:var(--accent)}
 
-  /* ── CONTROLS ── */
-  #controls {
-    position: fixed;
-    bottom: 20px; left: 50%;
-    transform: translateX(-50%);
-    z-index: 100;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    padding: 14px 18px;
-    display: flex; flex-direction: column; gap: 10px;
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    transition: opacity 0.4s, background 0.4s, border 0.4s;
-    font-size: 11px;
-    width: min(420px, 94vw);
-  }
+  #bottom-bar{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:50;display:flex;gap:10px;align-items:center;background:var(--panel-bg);border:1px solid rgba(255,255,255,.08);border-radius:24px;padding:8px 14px;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);transition:opacity .4s}
+  #bottom-bar button{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#ccc;border-radius:12px;padding:4px 10px;font-size:11px;font-family:inherit;cursor:pointer;white-space:nowrap;touch-action:manipulation}
+  #bottom-bar button:hover{background:rgba(255,255,255,.14)}
+  #btn-play{font-size:15px;font-weight:600;padding:8px 16px;border-radius:14px;flex-shrink:0}
+  #btn-play.active{background:rgba(212,168,83,.2);border-color:var(--accent);color:var(--accent)}
+  #btn-reset{font-size:16px;padding:6px 10px;flex-shrink:0}
 
-  .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .row.space-between { justify-content: space-between; }
+  /* Momentum speed picker */
+  #spd-wrap{position:relative;display:flex;align-items:center;overflow:hidden;width:200px;height:48px}
+  #spd-wrap::before,#spd-wrap::after{content:'';position:absolute;top:0;bottom:0;width:70px;z-index:2;pointer-events:none}
+  #spd-wrap::before{left:0;background:linear-gradient(to right,var(--panel-bg),transparent)}
+  #spd-wrap::after{right:0;background:linear-gradient(to left,var(--panel-bg),transparent)}
+  #spd-indicator{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:54px;height:40px;border:2px solid var(--accent);border-radius:10px;pointer-events:none;z-index:1}
+  #spd-track{display:flex;align-items:center;gap:0;will-change:transform;cursor:grab;z-index:3}
+  #spd-track:active{cursor:grabbing}
+  .spd-item{flex-shrink:0;width:56px;text-align:center;font-size:13px;color:#555;font-weight:500;padding:8px 0;cursor:pointer;user-select:none;-webkit-user-select:none;transition:color .15s,font-size .15s}
+  .spd-item.active{color:var(--accent);font-size:20px;font-weight:700}
 
-  .label {
-    color: var(--accent);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    font-size: 9px;
-    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
-    min-width: 36px;
-    white-space: nowrap;
-  }
+  body.fs-hide-ui #top-bar,body.fs-hide-ui #bottom-bar{opacity:0;pointer-events:none}
+  body.fs-hide-ui #fs-hint{opacity:.3}
+  #fs-hint{position:fixed;bottom:40px;left:50%;transform:translateX(-50%);z-index:40;font-size:11px;color:rgba(255,255,255,.2);pointer-events:none;transition:opacity .8s}
+  .tag{font-size:10px;color:var(--accent);font-variant-numeric:tabular-nums}
 
-  .val {
-    font-size: 10px;
-    color: var(--text-dim);
-    min-width: 32px; text-align: right;
-    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
-  }
+  /* Back button in client mode */
+  #btn-back{position:fixed;top:12px;left:12px;z-index:51;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#888;border-radius:50%;width:34px;height:34px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;transition:opacity .4s}
+  body.fs-hide-ui #btn-back{opacity:0;pointer-events:none}
 
-  button {
-    background: none;
-    border: 1px solid var(--border);
-    color: var(--text);
-    border-radius: 8px;
-    padding: 6px 12px;
-    cursor: pointer;
-    font-size: 11px;
-    font-family: inherit;
-    transition: background 0.15s, border-color 0.15s, color 0.4s;
-    display: inline-flex; align-items: center; justify-content: center;
-    gap: 4px;
-    white-space: nowrap;
-    touch-action: manipulation;
-  }
-  button:hover { background: rgba(212,168,83,0.1); border-color: var(--border-hover); }
-  button.active { background: rgba(212,168,83,0.18); border-color: var(--accent); color: var(--accent); }
-  button.accent { border-color: var(--accent); color: var(--accent); }
-  button.accent:hover { background: rgba(212,168,83,0.15); }
-
-  #btn-play {
-    flex: 1; padding: 8px 18px; font-size: 13px;
-    border-color: var(--accent); color: var(--accent);
-    font-weight: 600;
-  }
-
-  input[type=range] {
-    -webkit-appearance: none;
-    flex: 1; height: 3px;
-    background: var(--border);
-    border-radius: 2px; outline: none;
-    min-width: 60px;
-  }
-  input[type=range]::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 14px; height: 14px;
-    border-radius: 50%;
-    background: var(--accent);
-    cursor: pointer;
-    box-shadow: 0 0 6px var(--accent-glow);
-  }
-
-  select {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    color: var(--text);
-    border-radius: 7px;
-    padding: 5px 8px;
-    font-size: 11px;
-    font-family: inherit;
-    outline: none;
-    cursor: pointer;
-    transition: background 0.4s, border 0.4s, color 0.4s;
-  }
-  select:focus { border-color: var(--accent); }
-
-  .btn-group { display: flex; gap: 2px; }
-  .btn-group button:first-child { border-radius: 8px 0 0 8px; }
-  .btn-group button:last-child { border-radius: 0 8px 8px 0; }
-  .btn-group button:not(:first-child):not(:last-child) { border-radius: 0; }
-
-  .theme-dot {
-    width: 15px; height: 15px; border-radius: 50%;
-    cursor: pointer; border: 2px solid transparent;
-    transition: border-color 0.2s;
-  }
-  .theme-dot.active { border-color: var(--accent); }
-  .theme-dot.dark { background: #0b0b0d; }
-  .theme-dot.light { background: #f5f3ee; }
-  .theme-dot.green { background: #0a0f0a; }
-
-  /* ── MODAL ── */
-  .overlay {
-    display: none;
-    position: fixed; inset: 0;
-    background: rgba(0,0,0,0.75);
-    z-index: 200;
-    align-items: center; justify-content: center;
-    backdrop-filter: blur(4px);
-  }
-  .overlay.open { display: flex; }
-
-  .modal {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    padding: 24px;
-    width: min(720px, 92vw);
-    max-height: 90vh;
-    display: flex; flex-direction: column; gap: 14px;
-    transition: background 0.4s, border 0.4s;
-  }
-  .modal h3 {
-    color: var(--accent);
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
-  }
-  .modal textarea {
-    background: var(--bg);
-    border: 1px solid var(--border);
-    color: var(--text);
-    border-radius: 10px;
-    padding: 16px;
-    font-size: 14px;
-    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
-    resize: vertical;
-    min-height: 240px;
-    outline: none;
-    line-height: 1.6;
-    transition: background 0.4s, border 0.4s, color 0.4s;
-  }
-  .modal textarea:focus { border-color: var(--accent); }
-  .modal textarea::placeholder { color: var(--text-dim); opacity: 0.5; }
-
-  .import-options {
-    display: flex; gap: 8px; flex-wrap: wrap;
-  }
-  .import-options button {
-    font-size: 11px; padding: 7px 14px;
-  }
-
-  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
-  .modal-actions button { padding: 8px 20px; }
-  #btn-save { background: rgba(212,168,83,0.12); border-color: var(--accent); color: var(--accent); }
-
-  /* ── KEYBOARD HINT ── */
-  #kbd-hint {
-    position: fixed; top: 50px; right: 16px;
-    z-index: 99;
-    font-size: 10px; color: var(--text-dim);
-    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 10px 14px;
-    transition: opacity 0.4s, background 0.4s, border 0.4s;
-    line-height: 1.6;
-    pointer-events: none;
-  }
-  #kbd-hint kbd {
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 1px 6px;
-    font-family: inherit; font-size: 10px;
-    transition: background 0.4s, border 0.4s;
-  }
-
-  /* ── DRAG OVERLAY ── */
-  #drag-overlay {
-    display: none;
-    position: fixed; inset: 0;
-    z-index: 300;
-    background: rgba(212,168,83,0.08);
-    border: 3px dashed var(--accent);
-    border-radius: 20px;
-    margin: 16px;
-    align-items: center; justify-content: center;
-    font-size: 24px; color: var(--accent);
-    pointer-events: none;
-  }
-  #drag-overlay.show { display: flex; }
-
-  /* ── TOAST ── */
-  .toast {
-    position: fixed; bottom: 120px; left: 50%;
-    transform: translateX(-50%);
-    background: var(--accent); color: var(--bg);
-    padding: 8px 20px;
-    border-radius: 20px;
-    font-size: 13px; font-weight: 600;
-    z-index: 400;
-    animation: toast-in 0.3s ease, toast-out 0.3s ease 1.8s;
-  }
-  @keyframes toast-in { from { opacity: 0; transform: translateX(-50%) translateY(10px); } }
-  @keyframes toast-out { to { opacity: 0; transform: translateX(-50%) translateY(-10px); } }
-
-  /* ── RESPONSIVE ── */
-  @media (max-width: 600px) {
-    :root { --font-size: 36px; }
-    #controls { padding: 10px 14px; gap: 7px; border-radius: 12px; }
-    .modal { padding: 18px; }
-    #kbd-hint { display: none; }
-    #text-content { width: min(92vw, 960px); }
+  @media(max-width:600px){
+    :root{--fs:36px}
+    #bottom-bar{padding:6px 10px;gap:6px;border-radius:18px}
+    #spd-wrap{width:150px;height:40px}
+    .spd-item{width:46px;font-size:11px}
+    .spd-item.active{font-size:17px}
+    #spd-indicator{width:46px;height:34px}
+    #top-bar{font-size:10px;padding:4px 8px}
+    .modes{flex-direction:column}
+    .mode{padding:14px}
   }
 </style>
 </head>
 <body>
 
-<!-- Drag overlay -->
-<div id="drag-overlay">📂 拖放文件到此处导入</div>
+<!-- ═══ LANDING ═══ -->
+<div id="landing">
+  <div class="wrap">
+    <h1>🎬 提词器</h1>
+    <p class="sub">零依赖 · 点开即用 · 三种方式任选</p>
 
-<!-- Stage -->
-<div id="stage">
-  <div id="text-wrap">
-    <div id="text-content"><p>提词器已就绪</p><p>点击 <b>编辑脚本</b> 或直接 <b>粘贴/拖放</b> 文本开始</p><p></p><p>Teleprompter ready — press <b>Edit Script</b> or <b>drag &amp; drop</b> text to begin</p></div>
-  </div>
-</div>
-
-<!-- Fade edges -->
-<div id="fade-top"></div>
-<div id="fade-bottom"></div>
-
-<!-- Reading guide -->
-<div id="guide"></div>
-
-<!-- Status bar -->
-<div id="status-bar">
-  <span id="word-count">0 字</span>
-  <span id="speed-display">50 spd</span>
-  <span id="progress-display">--</span>
-</div>
-
-<!-- Keyboard hints -->
-<div id="kbd-hint">
-  <kbd>Space</kbd> 播放/暂停 &nbsp; <kbd>Esc</kbd> 停止<br>
-  <kbd>←</kbd><kbd>→</kbd> 速度 &nbsp; <kbd>↑</kbd><kbd>↓</kbd> 字号<br>
-  <kbd>F</kbd> 全屏 &nbsp; <kbd>M</kbd> 镜像 &nbsp; <kbd>E</kbd> 编辑<br>
-  <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> 主题 &nbsp; <kbd>?</kbd> 隐藏
-</div>
-
-<!-- Controls -->
-<div id="controls">
-  <div class="row">
-    <button id="btn-play" class="accent" title="Space">▶ 开始播放</button>
-    <button id="btn-stop" title="Esc">⏹ 停止</button>
-    <button id="btn-edit" title="E">✎ 编辑脚本</button>
-    <button id="btn-mirror" title="M">🪞 镜像</button>
-    <button id="btn-fullscreen" title="F">⛶</button>
-  </div>
-
-  <div class="row">
-    <span class="label">速度</span>
-    <input type="range" id="speed-slider" min="5" max="100" value="50" step="1">
-    <span class="val" id="speed-val">50</span>
-    <button id="btn-speed-down" title="←">−</button>
-    <button id="btn-speed-up" title="→">+</button>
-  </div>
-
-  <div class="row">
-    <span class="label">字号</span>
-    <input type="range" id="size-slider" min="20" max="120" value="52" step="2">
-    <span class="val" id="size-val">52px</span>
-    <button id="btn-size-down" title="↑">−</button>
-    <button id="btn-size-up" title="↓">+</button>
-  </div>
-
-  <div class="row space-between">
-    <div class="row">
-      <span class="label">字体</span>
-      <select id="font-select">
-        <option value="system-ui, -apple-system, sans-serif">无衬线</option>
-        <option value="'Noto Serif SC', Georgia, 'Songti SC', serif">衬线</option>
-        <option value="'SF Mono', 'Fira Code', 'Consolas', monospace">等宽</option>
-      </select>
-    </div>
-    <div class="row">
-      <span class="label">对齐</span>
-      <div class="btn-group" id="align-group">
-        <button data-align="left" title="左对齐">⫷</button>
-        <button data-align="center" class="active">⬤</button>
-        <button data-align="right" title="右对齐">⫸</button>
+    <div class="modes">
+      <div class="mode pri" id="mode-edit">
+        <span class="ico">✏️</span>
+        <span class="t">编辑脚本 → 生成链接</span>
+        <span class="d">写完生成二维码<br>平板扫码直接提词</span>
+      </div>
+      <div class="mode" id="mode-client">
+        <span class="ico">📱</span>
+        <span class="t">直接打开提词器</span>
+        <span class="d">全屏沉浸 · 翻动调速<br>拖动回溯 · 轻触暂停</span>
+      </div>
+      <div class="mode" id="mode-paste">
+        <span class="ico">📋</span>
+        <span class="t">粘贴脚本 → 立即开始</span>
+        <span class="d">复制好的文案<br>一键粘贴进提词器</span>
       </div>
     </div>
-  </div>
 
-  <div class="row space-between">
-    <div class="row">
-      <span class="label">行距</span>
-      <select id="line-height-select">
-        <option value="1.35">紧凑</option>
-        <option value="1.55" selected>标准</option>
-        <option value="1.85">宽松</option>
-        <option value="2.2">极宽</option>
-      </select>
-    </div>
-    <div class="row">
-      <span class="label">主题</span>
-      <div class="theme-dot dark active" data-theme="dark" title="暗色"></div>
-      <div class="theme-dot light" data-theme="light" title="亮色"></div>
-      <div class="theme-dot green" data-theme="green" title="绿色"></div>
-    </div>
-  </div>
-</div>
+    <hr>
 
-<!-- Edit Modal -->
-<div class="overlay" id="edit-overlay">
-  <div class="modal">
-    <h3>编辑脚本</h3>
-    <div class="import-options">
-      <button id="btn-paste">📋 粘贴文本</button>
-      <button id="btn-load-file">📁 打开文件</button>
-      <button id="btn-load-url">🌐 从 URL 加载</button>
-      <button id="btn-clear">🗑 清空</button>
+    <div id="edit-area" style="display:none">
+      <div id="drop-zone">📂 拖放 .txt / .md 文件，或点击选择</div>
+      <textarea id="ed" placeholder="在此输入或粘贴提词脚本…&#10;&#10;支持 **粗体** 和 *斜体*&#10;空行 = 停顿&#10;&#10;写完后点「生成链接」→ 平板扫码 → 直接开读"></textarea>
+      <div class="info">字数: <span class="v" id="cnt">--</span></div>
+      <div class="btns">
+        <button class="pri" id="btn-gen">🔗 生成提词链接</button>
+        <button id="btn-go-client">📱 直接在本机提词</button>
+        <button id="btn-paste">📋 从剪贴板粘贴</button>
+        <button id="btn-clear">🗑 清空</button>
+      </div>
+      <div id="share-card">
+        <img id="qr-img" src="" alt="QR Code">
+        <div class="share-r">
+          <label>平板扫码或输入此链接</label>
+          <div class="url" id="share-url"></div>
+          <div class="btns" style="margin-top:2px">
+            <button id="btn-copy-url">📋 复制链接</button>
+            <button id="btn-test-link">📱 预览</button>
+          </div>
+          <span class="note">⚠ 脚本较长时链接也较长。也可用本页直接提词（右侧按钮）</span>
+        </div>
+      </div>
     </div>
-    <textarea id="edit-area" placeholder="在此粘贴或输入脚本内容…&#10;支持纯文本和 Markdown 格式&#10;&#10;提示：也可以直接拖放 .txt/.md 文件到页面上"></textarea>
-    <div class="modal-actions">
-      <button id="btn-cancel">取消</button>
-      <button id="btn-save">✓ 应用脚本</button>
+
+    <div style="font-size:10px;color:#444;text-align:center">
+      快捷键: Cmd+S 生成链接 &nbsp;|&nbsp; 拖放 / 粘贴 / URL 均可导入
     </div>
   </div>
 </div>
 
-<!-- Hidden file input -->
-<input type="file" id="file-input" accept=".txt,.md,.html,.htm,.csv,.json" style="display:none">
+<!-- ═══ CLIENT ═══ -->
+<div id="client">
+  <div id="stage"><div id="text-wrap"><div id="text-content"><p>正在加载…</p></div></div></div>
+  <div id="fade-top"></div><div id="fade-bottom"></div><div id="guide"></div>
+  <button id="btn-back" title="返回编辑">←</button>
+
+  <div id="top-bar">
+    <span class="tag" id="prog-tag">--</span>
+    <button id="btn-fs" class="accent">⛶ 全屏</button>
+    <button id="btn-mirror">🪞</button>
+    <button id="btn-smaller">A-</button>
+    <button id="btn-bigger">A+</button>
+    <button id="btn-font">字体</button>
+    <button id="btn-lh">行距</button>
+  </div>
+
+  <div id="bottom-bar">
+    <button id="btn-play">▶ 播放</button>
+    <div id="spd-wrap"><div id="spd-indicator"></div><div id="spd-track"></div></div>
+    <button id="btn-reset" title="回到开头">↩</button>
+  </div>
+
+  <div id="fs-hint">轻触暂停 · 拖动回溯 · 翻动选速度</div>
+</div>
+
+<input type="file" id="fi" accept=".txt,.md,.html,.htm,.csv,.json" style="display:none">
 
 <script>
-(function() {
-  // ── State ──
-  const state = {
-    text: '',
-    paragraphs: [],
-    isPlaying: false,
-    speed: 50,         // 5-100
-    fontSize: 52,      // 20-120 px
-    fontFamily: 'system-ui, -apple-system, sans-serif',
-    lineHeight: 1.55,
-    align: 'center',
-    mirrored: false,
-    theme: 'dark',
-    scrollY: 0,        // current scroll offset in px
-    animFrame: null,
-    lastTime: 0,
-    uiTimeout: null,
-    totalHeight: 0,
-  };
-
-  // Load saved state
-  function loadState() {
-    try {
-      const saved = JSON.parse(localStorage.getItem('teleprompter-state'));
-      if (saved) {
-        if (saved.text) state.text = saved.text;
-        if (saved.speed) state.speed = saved.speed;
-        if (saved.fontSize) state.fontSize = saved.fontSize;
-        if (saved.fontFamily) state.fontFamily = saved.fontFamily;
-        if (saved.lineHeight) state.lineHeight = saved.lineHeight;
-        if (saved.align) state.align = saved.align;
-        if (saved.theme) state.theme = saved.theme;
-      }
-    } catch(e) { /* ignore */ }
-  }
-
-  function saveState() {
-    try {
-      localStorage.setItem('teleprompter-state', JSON.stringify({
-        text: state.text,
-        speed: state.speed,
-        fontSize: state.fontSize,
-        fontFamily: state.fontFamily,
-        lineHeight: state.lineHeight,
-        align: state.align,
-        theme: state.theme,
-      }));
-    } catch(e) { /* ignore */ }
-  }
-
-  // ── DOM refs ──
-  const $ = id => document.getElementById(id);
-  const stage = $('stage');
-  const textWrap = $('text-wrap');
-  const textContent = $('text-content');
-  const controls = $('controls');
-  const statusBar = $('status-bar');
-  const kbdHint = $('kbd-hint');
-  const dragOverlay = $('drag-overlay');
-  const editOverlay = $('edit-overlay');
-  const editArea = $('edit-area');
-  const btnPlay = $('btn-play');
-  const btnStop = $('btn-stop');
-  const btnMirror = $('btn-mirror');
-  const btnFullscreen = $('btn-fullscreen');
-  const speedSlider = $('speed-slider');
-  const speedVal = $('speed-val');
-  const sizeSlider = $('size-slider');
-  const sizeVal = $('size-val');
-  const fontSelect = $('font-select');
-  const lineHeightSelect = $('line-height-select');
-  const wordCountEl = $('word-count');
-  const speedDisplay = $('speed-display');
-  const progressDisplay = $('progress-display');
-  const fileInput = $('file-input');
-
-  // ── Apply state to DOM ──
-  function applyAll() {
-    const root = document.documentElement.style;
-    root.setProperty('--font-size', state.fontSize + 'px');
-    root.setProperty('--line-height', state.lineHeight);
-    root.setProperty('--font-family', state.fontFamily);
-    root.setProperty('--align', state.align);
-
-    // Text content
-    if (state.text.trim()) {
-      const html = state.text
-        .split(/\n/)
-        .map(line => {
-          const trimmed = line.trim();
-          if (!trimmed) return '<p></p>';
-          // Simple inline: **bold**, *italic*
-          let escaped = trimmed
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;');
-          escaped = escaped
-            .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
-            .replace(/\*(.+?)\*/g, '<i>$1</i>');
-          return `<p>${escaped}</p>`;
-        })
-        .join('\n');
-      textContent.innerHTML = html;
-    }
-
-    // Mirror
-    stage.classList.toggle('mirrored', state.mirrored);
-    btnMirror.classList.toggle('active', state.mirrored);
-
-    // Theme
-    document.body.className = 'theme-' + state.theme;
-    document.querySelectorAll('.theme-dot').forEach(d => {
-      d.classList.toggle('active', d.dataset.theme === state.theme);
-    });
-
-    // Font select
-    fontSelect.value = state.fontFamily;
-
-    // Line height
-    lineHeightSelect.value = String(state.lineHeight);
-
-    // Alignment buttons
-    document.querySelectorAll('#align-group button').forEach(b => {
-      b.classList.toggle('active', b.dataset.align === state.align);
-    });
-
-    // Speed slider
-    speedSlider.value = state.speed;
-    speedVal.textContent = state.speed;
-    speedDisplay.textContent = state.speed + ' spd';
-
-    // Size slider
-    sizeSlider.value = state.fontSize;
-    sizeVal.textContent = state.fontSize + 'px';
-
-    // Word count
-    const chars = state.text.replace(/\s/g, '').length;
-    const words = state.text.trim() ? state.text.trim().split(/\s+/).length : 0;
-    wordCountEl.textContent = words + ' 词 / ' + chars + ' 字';
-
-    // Edit area
-    editArea.value = state.text;
-
-    // Scroll position
-    textWrap.style.transform = `translateY(${state.scrollY * -1}px)`;
-  }
-
-  // Calculate total scrollable height
-  function calcTotalHeight() {
-    // Total text height minus one viewport (since we start at center)
-    const textH = textContent.scrollHeight;
-    const padding = window.innerHeight; // top padding 50vh + viewing area
-    state.totalHeight = Math.max(0, textH - window.innerHeight * 0.3);
-    return state.totalHeight;
-  }
-
-  // ── Scrolling ──
-  function startScroll() {
-    if (state.animFrame) return;
-    state.isPlaying = true;
-    state.lastTime = performance.now();
-    document.body.classList.add('playing');
-    document.body.classList.remove('paused');
-    btnPlay.textContent = '⏸ 暂停';
-    btnPlay.classList.add('active');
-    loop();
-  }
-
-  function pauseScroll() {
-    state.isPlaying = false;
-    if (state.animFrame) {
-      cancelAnimationFrame(state.animFrame);
-      state.animFrame = null;
-    }
-    document.body.classList.remove('playing');
-    document.body.classList.add('paused');
-    btnPlay.textContent = '▶ 继续';
-    btnPlay.classList.remove('active');
-  }
-
-  function stopScroll() {
-    pauseScroll();
-    state.scrollY = 0;
-    textWrap.style.transform = 'translateY(0px)';
-    document.body.classList.remove('playing', 'paused');
-    btnPlay.textContent = '▶ 开始播放';
-  }
-
-  function loop(timestamp) {
-    if (!timestamp) timestamp = performance.now();
-    const dt = Math.min((timestamp - state.lastTime) / 1000, 0.1); // cap at 100ms
-    state.lastTime = timestamp;
-
-    // px per second = speed * 2 (range: 10-200 px/s)
-    const pxPerSec = state.speed * 2;
-    state.scrollY += pxPerSec * dt;
-
-    // Recalc total height periodically
-    if (Math.floor(timestamp / 500) !== Math.floor((timestamp - dt * 1000) / 500)) {
-      calcTotalHeight();
-    }
-
-    // Check if we've scrolled past everything
-    if (state.scrollY >= state.totalHeight) {
-      stopScroll();
-      showToast('播放完毕 ✓');
-      return;
-    }
-
-    textWrap.style.transform = `translateY(${state.scrollY * -1}px)`;
-    updateProgress();
-    state.animFrame = requestAnimationFrame(loop);
-  }
-
-  function updateProgress() {
-    if (state.totalHeight <= 0) {
-      progressDisplay.textContent = '--';
-      return;
-    }
-    const pct = Math.min(100, Math.round((state.scrollY / state.totalHeight) * 100));
-    progressDisplay.textContent = pct + '%';
-  }
-
-  // ── UI visibility ──
-  function showUI() {
-    document.body.classList.add('show-ui');
-    clearTimeout(state.uiTimeout);
-    state.uiTimeout = setTimeout(() => {
-      if (state.isPlaying) document.body.classList.remove('show-ui');
-    }, 2500);
-  }
-
-  // ── Toast ──
-  function showToast(msg) {
-    const t = document.createElement('div');
-    t.className = 'toast';
-    t.textContent = msg;
-    document.body.appendChild(t);
-    setTimeout(() => t.remove(), 2200);
-  }
-
-  // ── Set text ──
-  function setText(txt) {
-    state.text = txt;
-    state.scrollY = 0;
-    applyAll();
-    calcTotalHeight();
-    saveState();
-  }
-
-  // ── Import: file ──
-  function loadFile(file) {
-    const reader = new FileReader();
-    reader.onload = () => {
-      setText(reader.result);
-      showToast('已导入: ' + file.name);
-    };
-    reader.onerror = () => showToast('文件读取失败');
-    reader.readAsText(file);
-  }
-
-  // ── Import: URL ──
-  async function loadURL(url) {
-    try {
-      // Try direct fetch first
-      const resp = await fetch(url);
-      if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      const txt = await resp.text();
-      setText(txt);
-      showToast('已从 URL 加载');
-    } catch(e) {
-      // Try CORS proxy as fallback
-      try {
-        const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
-        const resp = await fetch(proxyUrl);
-        if (!resp.ok) throw new Error('Proxy failed');
-        const txt = await resp.text();
-        setText(txt);
-        showToast('已从 URL 加载（代理）');
-      } catch(e2) {
-        showToast('URL 加载失败，请检查链接或尝试直接粘贴');
-      }
-    }
-  }
-
-  // ── Event handlers ──
-  btnPlay.addEventListener('click', () => {
-    if (!state.text.trim()) {
-      showToast('请先导入脚本内容');
-      return;
-    }
-    if (state.isPlaying) pauseScroll();
-    else startScroll();
-  });
-
-  btnStop.addEventListener('click', stopScroll);
-
-  btnMirror.addEventListener('click', () => {
-    state.mirrored = !state.mirrored;
-    applyAll();
-    saveState();
-  });
-
-  btnFullscreen.addEventListener('click', () => {
-    if (document.fullscreenElement) {
-      document.exitFullscreen();
-    } else {
-      document.documentElement.requestFullscreen();
-    }
-  });
-
-  // Speed
-  speedSlider.addEventListener('input', () => {
-    state.speed = parseInt(speedSlider.value);
-    speedVal.textContent = state.speed;
-    speedDisplay.textContent = state.speed + ' spd';
-    saveState();
-  });
-
-  $('btn-speed-down').addEventListener('click', () => {
-    state.speed = Math.max(5, state.speed - 5);
-    applyAll();
-    saveState();
-  });
-
-  $('btn-speed-up').addEventListener('click', () => {
-    state.speed = Math.min(100, state.speed + 5);
-    applyAll();
-    saveState();
-  });
-
-  // Font size
-  sizeSlider.addEventListener('input', () => {
-    state.fontSize = parseInt(sizeSlider.value);
-    sizeVal.textContent = state.fontSize + 'px';
-    document.documentElement.style.setProperty('--font-size', state.fontSize + 'px');
-    calcTotalHeight();
-    saveState();
-  });
-
-  $('btn-size-down').addEventListener('click', () => {
-    state.fontSize = Math.max(20, state.fontSize - 4);
-    applyAll();
-    calcTotalHeight();
-    saveState();
-  });
-
-  $('btn-size-up').addEventListener('click', () => {
-    state.fontSize = Math.min(120, state.fontSize + 4);
-    applyAll();
-    calcTotalHeight();
-    saveState();
-  });
-
-  // Font family
-  fontSelect.addEventListener('change', () => {
-    state.fontFamily = fontSelect.value;
-    applyAll();
-    saveState();
-  });
-
-  // Line height
-  lineHeightSelect.addEventListener('change', () => {
-    state.lineHeight = parseFloat(lineHeightSelect.value);
-    applyAll();
-    calcTotalHeight();
-    saveState();
-  });
-
-  // Alignment
-  $('align-group').addEventListener('click', (e) => {
-    const btn = e.target.closest('button');
-    if (!btn || !btn.dataset.align) return;
-    state.align = btn.dataset.align;
-    applyAll();
-    saveState();
-  });
-
-  // Theme dots
-  document.querySelectorAll('.theme-dot').forEach(dot => {
-    dot.addEventListener('click', () => {
-      state.theme = dot.dataset.theme;
-      applyAll();
-      saveState();
-    });
-  });
-
-  // Edit modal
-  $('btn-edit').addEventListener('click', () => {
-    editArea.value = state.text;
-    editOverlay.classList.add('open');
-    editArea.focus();
-  });
-
-  $('btn-save').addEventListener('click', () => {
-    setText(editArea.value);
-    editOverlay.classList.remove('open');
-  });
-
-  $('btn-cancel').addEventListener('click', () => {
-    editOverlay.classList.remove('open');
-  });
-
-  editOverlay.addEventListener('click', (e) => {
-    if (e.target === editOverlay) editOverlay.classList.remove('open');
-  });
-
-  // Import buttons inside modal
-  $('btn-paste').addEventListener('click', async () => {
-    try {
-      const clipText = await navigator.clipboard.readText();
-      if (clipText) {
-        editArea.value = clipText;
-        showToast('已从剪贴板粘贴');
-      }
-    } catch(e) {
-      showToast('无法读取剪贴板，请手动粘贴 (Cmd+V)');
-    }
-  });
-
-  $('btn-load-file').addEventListener('click', () => fileInput.click());
-
-  $('btn-load-url').addEventListener('click', () => {
-    const url = prompt('输入文本文件的 URL：');
-    if (url) loadURL(url);
-  });
-
-  $('btn-clear').addEventListener('click', () => {
-    if (confirm('确定要清空所有内容吗？')) {
-      editArea.value = '';
-    }
-  });
-
-  fileInput.addEventListener('change', () => {
-    if (fileInput.files[0]) loadFile(fileInput.files[0]);
-    fileInput.value = '';
-  });
-
-  // ── Drag & Drop ──
-  let dragCounter = 0;
-  document.addEventListener('dragenter', (e) => {
-    e.preventDefault();
-    dragCounter++;
-    if (dragCounter === 1) dragOverlay.classList.add('show');
-  });
-
-  document.addEventListener('dragleave', (e) => {
-    e.preventDefault();
-    dragCounter--;
-    if (dragCounter === 0) dragOverlay.classList.remove('show');
-  });
-
-  document.addEventListener('dragover', (e) => {
-    e.preventDefault();
-  });
-
-  document.addEventListener('drop', (e) => {
-    e.preventDefault();
-    dragCounter = 0;
-    dragOverlay.classList.remove('show');
-    const file = e.dataTransfer.files[0];
-    if (file) loadFile(file);
-  });
-
-  // ── Click stage to toggle pause ──
-  stage.addEventListener('click', (e) => {
-    if (e.target.closest('#controls') || e.target.closest('.overlay')) return;
-    if (state.isPlaying) pauseScroll();
-    else if (state.text.trim()) startScroll();
-  });
-
-  // ── Mouse move shows UI ──
-  document.addEventListener('mousemove', showUI);
-  document.addEventListener('touchstart', showUI);
-
-  // ── Keyboard shortcuts ──
-  document.addEventListener('keydown', (e) => {
-    // Cmd+S / Ctrl+S to save in modal
-    if ((e.metaKey || e.ctrlKey) && e.key === 's') {
-      if (editOverlay.classList.contains('open')) {
-        e.preventDefault();
-        setText(editArea.value);
-        editOverlay.classList.remove('open');
-        showToast('已保存 ✓');
-      }
-      return;
-    }
-
-    // Don't capture in modal (except Esc which closes it)
-    if (editOverlay.classList.contains('open')) {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        editOverlay.classList.remove('open');
-      }
-      return;
-    }
-
-    // Don't capture when typing in inputs
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
-
-    switch(e.key) {
-      case ' ':
-        e.preventDefault();
-        if (state.isPlaying) pauseScroll();
-        else if (state.text.trim()) startScroll();
-        break;
-      case 'Escape':
-        stopScroll();
-        break;
-      case 'ArrowLeft':
-        e.preventDefault();
-        state.speed = Math.max(5, state.speed - 1);
-        applyAll(); saveState();
-        break;
-      case 'ArrowRight':
-        e.preventDefault();
-        state.speed = Math.min(100, state.speed + 1);
-        applyAll(); saveState();
-        break;
-      case 'ArrowUp':
-        e.preventDefault();
-        state.fontSize = Math.min(120, state.fontSize + 2);
-        applyAll(); calcTotalHeight(); saveState();
-        break;
-      case 'ArrowDown':
-        e.preventDefault();
-        state.fontSize = Math.max(20, state.fontSize - 2);
-        applyAll(); calcTotalHeight(); saveState();
-        break;
-      case 'f':
-      case 'F':
-        if (document.fullscreenElement) document.exitFullscreen();
-        else document.documentElement.requestFullscreen();
-        break;
-      case 'm':
-      case 'M':
-        state.mirrored = !state.mirrored;
-        applyAll(); saveState();
-        break;
-      case 'e':
-      case 'E':
-        editArea.value = state.text;
-        editOverlay.classList.add('open');
-        editArea.focus();
-        break;
-      case '1':
-        state.theme = 'dark'; applyAll(); saveState(); break;
-      case '2':
-        state.theme = 'light'; applyAll(); saveState(); break;
-      case '3':
-        state.theme = 'green'; applyAll(); saveState(); break;
-      case '?':
-        kbdHint.style.display = kbdHint.style.display === 'none' ? '' : 'none';
-        break;
-    }
-  });
-
-  // ── Paste anywhere ──
-  document.addEventListener('paste', (e) => {
-    if (editOverlay.classList.contains('open')) return;
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-    const txt = e.clipboardData.getData('text/plain');
-    if (txt && txt.length > 10) {
-      e.preventDefault();
-      if (confirm('检测到剪贴板文本 (' + txt.length + ' 字符)，是否导入为脚本？')) {
-        setText(txt);
-        showToast('已导入剪贴板内容');
-      }
-    }
-  });
-
-  // ── Init ──
-  loadState();
-  if (!state.text.trim()) {
-    state.text = '提词器已就绪\n\n点击 编辑脚本 或直接粘贴/拖放文本开始\n\nTeleprompter ready — press Edit Script or drag & drop text to begin';
-  }
-  applyAll();
-  calcTotalHeight();
-
-  // Recalc on resize
-  window.addEventListener('resize', () => {
-    calcTotalHeight();
-    // Clamp scroll position
-    if (state.scrollY > state.totalHeight) state.scrollY = state.totalHeight;
-    textWrap.style.transform = `translateY(${state.scrollY * -1}px)`;
-  });
-
-  console.log('🎬 提词器已就绪 · Teleprompter ready');
-  console.log('   Space=播放  ←→=速度  ↑↓=字号  F=全屏  M=镜像  E=编辑  1/2/3=主题');
-  console.log('   拖放文件 | 粘贴文本 | 打开URL 均可导入脚本');
+(function(){
+var $=function(id){return document.getElementById(id)};
+var d=document;
+
+// ═══════════════════════════════════════
+//  LANDING PAGE LOGIC
+// ═══════════════════════════════════════
+var ed=$('ed'),cnt=$('cnt'),shareCard=$('share-card'),qrImg=$('qr-img'),shareUrl=$('share-url');
+var editArea=$('edit-area'),dropZone=$('drop-zone');
+var clientContent='';
+
+// Check if URL has embedded content → auto-enter client mode
+var hash=location.hash;
+if(hash.indexOf('#c=')===0){
+  try{
+    var raw=hash.slice(3);
+    clientContent=decodeURIComponent(escape(atob(raw.replace(/-/g,'+').replace(/_/g,'/'))));
+    enterClient(clientContent);
+  }catch(e){}
+}
+
+function encodeContent(txt){try{return btoa(unescape(encodeURIComponent(txt))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}catch(e){return''}}
+
+function generateLink(){
+  var txt=ed.value.trim();
+  if(!txt){alert('请先输入脚本内容');return}
+  var enc=encodeContent(txt);
+  if(!enc){alert('内容过长，编码失败');return}
+  var url=location.origin+location.pathname+'#c='+enc;
+  shareUrl.textContent=url;
+  qrImg.src='https://api.qrserver.com/v1/create-qr-code/?size=250x250&data='+encodeURIComponent(url);
+  shareCard.classList.add('show');
+}
+function updCnt(){var t=ed.value;cnt.textContent=(t.trim()?t.trim().split(/\s+/).length:0)+' 词 / '+t.replace(/\s/g,'').length+' 字'}
+
+// Mode toggles
+$('mode-edit').addEventListener('click',function(){editArea.style.display='';editArea.scrollIntoView({behavior:'smooth'});ed.focus()});
+$('mode-client').addEventListener('click',function(){enterClient(ed.value.trim()||defaultScript())});
+$('mode-paste').addEventListener('click',function(){navigator.clipboard.readText().then(function(t){if(t&&t.trim()){clientContent=t;enterClient(t)}else{alert('剪贴板为空或无法读取')}}).catch(function(){alert('无法读取剪贴板，请手动粘贴到编辑器后使用「直接在本机提词」')})});
+
+// Button handlers
+$('btn-gen').addEventListener('click',generateLink);
+$('btn-go-client').addEventListener('click',function(){var t=ed.value.trim();if(!t){alert('请先输入脚本');return}enterClient(t)});
+$('btn-paste').addEventListener('click',function(){navigator.clipboard.readText().then(function(t){if(t){ed.value=t;updCnt()}}).catch(function(){alert('无法读取剪贴板')})});
+$('btn-clear').addEventListener('click',function(){if(confirm('确定清空？')){ed.value='';updCnt();shareCard.classList.remove('show')}});
+$('btn-copy-url').addEventListener('click',function(){navigator.clipboard.writeText(shareUrl.textContent).then(function(){var b=$('btn-copy-url');b.textContent='已复制!';setTimeout(function(){b.textContent='📋 复制链接'},1500)})});
+$('btn-test-link').addEventListener('click',function(){enterClient(ed.value.trim()||defaultScript())});
+
+// Drop zone
+dropZone.addEventListener('click',function(){$('fi').click()});
+dropZone.addEventListener('dragover',function(e){e.preventDefault();dropZone.classList.add('drag')});
+dropZone.addEventListener('dragleave',function(){dropZone.classList.remove('drag')});
+dropZone.addEventListener('drop',function(e){e.preventDefault();dropZone.classList.remove('drag');var f=e.dataTransfer.files[0];if(f)readFile(f)});
+d.addEventListener('dragover',function(e){e.preventDefault();dropZone.classList.add('drag')});
+d.addEventListener('drop',function(e){e.preventDefault();dropZone.classList.remove('drag');var f=e.dataTransfer.files[0];if(f)readFile(f)});
+function readFile(f){var r=new FileReader();r.onload=function(){ed.value=r.result;updCnt()};r.readAsText(f)}
+$('fi').addEventListener('change',function(){if(this.files[0]){readFile(this.files[0]);this.value=''}});
+
+ed.addEventListener('input',function(){updCnt();if(shareCard.classList.contains('show'))shareCard.classList.remove('show')});
+d.addEventListener('keydown',function(e){if((e.metaKey||e.ctrlKey)&&e.key==='s'&&d.activeElement===ed){e.preventDefault();generateLink()}});
+
+function defaultScript(){return '欢迎使用提词器\n\n这是一个零依赖、即开即用的 Web 提词器\n\n支持 **粗体** 和 *斜体* 标记\n空行代表停顿\n\n把这段文字替换成你的脚本\n然后点击播放开始提词\n\n快捷键:\nSpace 播放/暂停\nEsc 停止\nF 全屏\nM 镜像\n← → 调整速度\n↑ ↓ 调整字号'}
+
+// ═══════════════════════════════════════
+//  CLIENT LOGIC
+// ═══════════════════════════════════════
+var STEPS=[10,15,20,25,30,35,40,45,50,55,60,65,70,80,90,100];
+var FONTS=["system-ui,-apple-system,'PingFang SC',sans-serif","'Noto Serif SC',Georgia,'Songti SC',serif","'SF Mono','Fira Code','Consolas',monospace"];
+var LHEIGHTS=[1.35,1.55,1.85,2.2];
+var LH_LABELS=['紧凑','标准','宽松','极宽'];
+var scrollY=0,totalH=0,speed=40,fsize=48,fidx=0,lidx=1;
+var isPlay=false,isMir=false,isFS=false,af=null,lt=0,uiT=null;
+var tsY=0,tsSY=0,tsOn=false,tsMv=false;
+var currIdx=STEPS.indexOf(speed),trackX=0,vel=0,trk=false,sx=0,spx=0,lx2=0,lt2=0,tid=null;
+var md=false,msy=0,mss=0;
+
+var stage=$('stage'),tw=$('text-wrap'),tc=$('text-content');
+var btnPlay=$('btn-play'),btnFS=$('btn-fs'),btnMir=$('btn-mirror');
+var spdWrap=$('spd-wrap'),spdTrack=$('spd-track'),progTag=$('prog-tag');
+
+function enterClient(txt){
+  d.body.classList.add('client-mode');
+  renderText(txt);buildPicker();applyVars();calcTH();updProg();
+}
+
+function renderText(txt){
+  var h=txt.split('\n').map(function(l){var t=l.trim();if(!t)return'<p></p>';t=t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');t=t.replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/\*(.+?)\*/g,'<i>$1</i>');return'<p>'+t+'</p>'}).join('\n');
+  tc.innerHTML=h;calcTH();updProg();
+}
+function calcTH(){totalH=Math.max(0,tc.scrollHeight-window.innerHeight*.3)}
+function applyVars(){d.documentElement.style.setProperty('--fs',fsize+'px');d.documentElement.style.setProperty('--lh',LHEIGHTS[lidx]);d.documentElement.style.setProperty('--ff',FONTS[fidx])}
+
+function startA(){if(af)return;if(scrollY>=totalH){scrollY=0;updPos()}isPlay=true;lt=performance.now();btnPlay.textContent='⏸ 暂停';btnPlay.classList.add('active');loop()}
+function pauseA(){isPlay=false;if(af){cancelAnimationFrame(af);af=null}btnPlay.textContent='▶ 播放';btnPlay.classList.remove('active')}
+function stopA(){pauseA();scrollY=0;updPos();updProg()}
+function loop(ts){if(!ts)ts=performance.now();var dt=Math.min((ts-lt)/1000,.1);lt=ts;scrollY+=speed*2.2*dt;if(Math.floor(ts/500)!==Math.floor((ts-dt*1000)/500))calcTH();if(scrollY>=totalH){pauseA();scrollY=totalH;updPos();updProg();return}updPos();updProg();af=requestAnimationFrame(loop)}
+function updPos(){tw.style.transform='translateY('+(scrollY*-1)+'px)'}
+function updProg(){progTag.textContent=totalH<=0?'--':Math.min(100,Math.round(scrollY/totalH*100))+'%'}
+
+// Speed picker
+function buildPicker(){
+  spdTrack.innerHTML='';
+  STEPS.forEach(function(v,i){var d=document.createElement('div');d.className='spd-item';d.textContent=v;d.dataset.idx=i;spdTrack.appendChild(d)});
+  var hw=spdWrap.offsetWidth/2;trackX=hw-28-currIdx*56;updateTrack(false);
+}
+function updateTrack(anim){
+  spdTrack.style.transition=anim?'transform .25s cubic-bezier(.25,.8,.25,1.3)':'none';
+  spdTrack.style.transform='translateX('+trackX+'px)';
+  var cx=-trackX+spdWrap.offsetWidth/2,ni=Math.round((cx-28)/56);ni=Math.max(0,Math.min(STEPS.length-1,ni));
+  if(ni!==currIdx){currIdx=ni;speed=STEPS[ni];spdTrack.querySelectorAll('.spd-item').forEach(function(el,i){el.classList.toggle('active',i===currIdx)})}
+}
+function snapTo(idx){currIdx=Math.max(0,Math.min(STEPS.length-1,idx));speed=STEPS[currIdx];var hw=spdWrap.offsetWidth/2;trackX=hw-28-currIdx*56;vel=0;updateTrack(true);spdTrack.querySelectorAll('.spd-item').forEach(function(el,i){el.classList.toggle('active',i===currIdx)})}
+function clampX(){var hw=spdWrap.offsetWidth/2,mx=hw-28,mn=-(STEPS.length*56-hw+28);if(trackX>mx+40)trackX=mx+40;else if(trackX<mn-40)trackX=mn-40}
+function startMomentum(){var tv=vel,fric=.945,mv=.15;function anim(){if(trk)return;trackX+=tv;tv*=fric;var hw=spdWrap.offsetWidth/2,mx=hw-28,mn=-(STEPS.length*56-hw+28);if(trackX>mx){trackX=mx;tv*=-.3}else if(trackX<mn){trackX=mn;tv*=-.3}updateTrack(false);if(Math.abs(tv)<mv){snapTo(currIdx);return}tid=requestAnimationFrame(anim)}tid=requestAnimationFrame(anim)}
+function cancelTween(){if(tid){cancelAnimationFrame(tid);tid=null}}
+var snapTmr=null;
+function debounceSnap(){clearTimeout(snapTmr);snapTmr=setTimeout(function(){snapTo(currIdx)},150)}
+
+spdTrack.addEventListener('touchstart',function(e){e.preventDefault();trk=true;vel=0;tsMv=false;sx=e.touches[0].clientX;spx=trackX;lx2=sx;lt2=Date.now();cancelTween();updateTrack(false)},{passive:false});
+spdTrack.addEventListener('touchmove',function(e){if(!trk)return;e.preventDefault();var x=e.touches[0].clientX,dx=x-sx;if(Math.abs(dx)>3)tsMv=true;var now=Date.now(),dt=now-lt2;if(dt>0)vel=(x-lx2)/dt*16.67;lx2=x;lt2=now;trackX=spx+dx;clampX();updateTrack(false)},{passive:false});
+spdTrack.addEventListener('touchend',function(){if(!trk)return;trk=false;if(!tsMv){snapTo(currIdx);return}startMomentum()});
+spdTrack.addEventListener('mousedown',function(e){e.preventDefault();trk=true;vel=0;tsMv=false;sx=e.clientX;spx=trackX;lx2=sx;lt2=Date.now();cancelTween();updateTrack(false)});
+window.addEventListener('mousemove',function(e){if(!trk)return;var dx=e.clientX-sx;if(Math.abs(dx)>3)tsMv=true;var now=Date.now(),dt=now-lt2;if(dt>0)vel=(e.clientX-lx2)/dt*16.67;lx2=e.clientX;lt2=now;trackX=spx+dx;clampX();updateTrack(false)});
+window.addEventListener('mouseup',function(){if(!trk)return;trk=false;if(!tsMv){snapTo(currIdx);return}startMomentum()});
+spdWrap.addEventListener('wheel',function(e){e.preventDefault();cancelTween();trackX-=e.deltaY*.5;clampX();updateTrack(false);debounceSnap()},{passive:false});
+spdTrack.addEventListener('click',function(e){if(tsMv)return;var el=e.target.closest('.spd-item');if(!el)return;snapTo(parseInt(el.dataset.idx))});
+
+// Touch interaction
+stage.addEventListener('touchstart',function(e){if(e.target.closest('button')||e.target.closest('#bottom-bar')||e.target.closest('#top-bar')||e.target.closest('#spd-wrap')||e.target.closest('#btn-back'))return;e.preventDefault();tsOn=true;tsMv=false;tsY=e.touches[0].clientY;tsSY=scrollY;pauseA();showUI()},{passive:false});
+stage.addEventListener('touchmove',function(e){if(!tsOn)return;e.preventDefault();var dy=tsY-e.touches[0].clientY;if(Math.abs(dy)>3)tsMv=true;scrollY=Math.max(0,Math.min(totalH,tsSY+dy));updPos();updProg()},{passive:false});
+stage.addEventListener('touchend',function(){if(!tsOn)return;tsOn=false;if(!tsMv){if(isPlay)pauseA();else startA()}hideAfter()});
+stage.addEventListener('mousedown',function(e){if(e.target.closest('button')||e.target.closest('#bottom-bar')||e.target.closest('#top-bar')||e.target.closest('#spd-wrap')||e.target.closest('#btn-back'))return;md=true;msy=e.clientY;mss=scrollY;pauseA();showUI()});
+window.addEventListener('mousemove',function(e){if(!md)return;scrollY=Math.max(0,Math.min(totalH,mss+(msy-e.clientY)));updPos();updProg();showUI()});
+window.addEventListener('mouseup',function(){if(!md)return;var mvd=Math.abs(scrollY-mss)>2;md=false;if(!mvd){if(isPlay)pauseA();else startA()}hideAfter()});
+
+// UI
+function showUI(){d.body.classList.remove('fs-hide-ui');clearTimeout(uiT)}
+function hideAfter(){clearTimeout(uiT);if(isFS)uiT=setTimeout(function(){if(!tsOn&&!md)d.body.classList.add('fs-hide-ui')},3000)}
+function enterFS(){var el=d.documentElement;if(el.requestFullscreen)el.requestFullscreen();else if(el.webkitRequestFullscreen)el.webkitRequestFullscreen()}
+function exitFS(){if(d.fullscreenElement)d.exitFullscreen();else if(d.webkitFullscreenElement)d.webkitExitFullscreen()}
+function onFSC(){isFS=!!(d.fullscreenElement||d.webkitFullscreenElement);btnFS.textContent=isFS?'⛶ 退出':'⛶ 全屏';btnFS.classList.toggle('active',isFS);$('fs-hint').style.display=isFS?'':'none';$('btn-back').style.display=isFS?'none':'';if(isFS)hideAfter();else{showUI();d.body.classList.remove('fs-hide-ui')}}
+d.addEventListener('fullscreenchange',onFSC);d.addEventListener('webkitfullscreenchange',onFSC);
+
+// Buttons
+btnFS.addEventListener('click',function(){isFS?exitFS():enterFS()});
+btnPlay.addEventListener('click',function(){(isPlay?pauseA:startA)()});
+btnMir.addEventListener('click',function(){isMir=!isMir;stage.classList.toggle('mirrored',isMir);btnMir.classList.toggle('active',isMir)});
+$('btn-bigger').addEventListener('click',function(){fsize=Math.min(96,fsize+6);applyVars();calcTH()});
+$('btn-smaller').addEventListener('click',function(){fsize=Math.max(20,fsize-6);applyVars();calcTH()});
+$('btn-reset').addEventListener('click',function(){pauseA();scrollY=0;updPos();updProg();showUI()});
+$('btn-font').addEventListener('click',function(){fidx=(fidx+1)%FONTS.length;applyVars();showToast('字体: '+(fidx===0?'无衬线':fidx===1?'衬线':'等宽'))});
+$('btn-lh').addEventListener('click',function(){lidx=(lidx+1)%LHEIGHTS.length;applyVars();calcTH();showToast('行距: '+LH_LABELS[lidx])});
+$('btn-back').addEventListener('click',function(){pauseA();d.body.classList.remove('client-mode');history.replaceState(null,'',location.pathname)});
+
+function showToast(m){var t=d.createElement('div');t.style.cssText='position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:var(--accent);color:var(--bg);padding:6px 18px;border-radius:16px;font-size:13px;font-weight:600;z-index:400;animation:tIn .25s ease,tOut .25s ease 1.5s forwards';t.textContent=m;d.body.appendChild(t);setTimeout(function(){t.remove()},2000)}
+if(!d.getElementById('toast-style')){var ts=d.createElement('style');ts.id='toast-style';ts.textContent='@keyframes tIn{from{opacity:0;transform:translateX(-50%) translateY(8px)}}@keyframes tOut{to{opacity:0;transform:translateX(-50%) translateY(-8px)}}';d.head.appendChild(ts)}
+
+// Keyboard
+d.addEventListener('keydown',function(e){if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA')return;switch(e.key){case' ':e.preventDefault();(isPlay?pauseA:startA)();break;case'Escape':e.preventDefault();stopA();showUI();break;case'ArrowLeft':e.preventDefault();snapTo(currIdx-1);break;case'ArrowRight':e.preventDefault();snapTo(currIdx+1);break;case'ArrowUp':fsize=Math.min(96,fsize+4);applyVars();calcTH();break;case'ArrowDown':fsize=Math.max(20,fsize-4);applyVars();calcTH();break;case'f':case'F':(isFS?exitFS:enterFS)();break;case'm':case'M':btnMir.click();break}});
+
+window.addEventListener('resize',function(){calcTH();if(scrollY>totalH){scrollY=totalH;updPos()};if(d.body.classList.contains('client-mode'))buildPicker()});
+d.addEventListener('mousemove',function(){if(isFS)showUI();hideAfter()});
+d.addEventListener('touchstart',function(e){if(isFS&&!e.target.closest('#spd-wrap')&&!e.target.closest('#btn-back')){showUI();hideAfter()}},{passive:true});
+
+// Init
+updCnt();
+
+// Auto-show editor if not in client mode (friendly landing)
+if(!d.body.classList.contains('client-mode')){
+  setTimeout(function(){
+    if(!hash||hash.indexOf('#c=')!==0) editArea.style.display='';
+  },200);
+}
+
+console.log('🎬 提词器 v1.3 | 编辑→生成链接→扫码→提词');
 })();
 </script>
 </body>
